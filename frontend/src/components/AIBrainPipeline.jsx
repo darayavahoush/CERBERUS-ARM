@@ -65,7 +65,7 @@ export default function AIBrainPipeline({
     },
     {
       id: 'planner',
-      title: 'Ollama PDDL Planner',
+      title: 'Ollama Task Planner',
       head: 'HEAD 3: BRAIN',
       category: 'Reasoning',
       latency: '118 ms',
@@ -78,7 +78,7 @@ export default function AIBrainPipeline({
       activeColor: 'text-amber-400',
       details: {
         model: 'Local Ollama (llama3.2 / qwen2.5) with Neuro-Symbolic Fallback',
-        schema: 'Structured JSON PDDL-style Subgoal sequence',
+        schema: 'Validated JSON task plan with target, destination, and constraints',
         modulation: 'Dynamic supervisory reward weights (λ_coll, λ_jerk, λ_step)',
         forensics: 'Post-hoc Explainable AI (XAI) trajectory forensics',
       },
@@ -105,11 +105,11 @@ export default function AIBrainPipeline({
     },
     {
       id: 'physics',
-      title: 'MuJoCo 3.17 Physics',
+      title: 'MuJoCo Kinematic Twin',
       head: 'DIGITAL TWIN',
       category: 'Simulation',
       latency: '5.0 ms',
-      shape: 'RK4 0.005s',
+      shape: 'Named joint state',
       metric: `w = ${manipulability.toFixed(3)}`,
       icon: Cpu,
       color: '#8b5cf6',
@@ -117,9 +117,9 @@ export default function AIBrainPipeline({
       bg: 'bg-purple-950/20',
       activeColor: 'text-purple-400',
       details: {
-        integrator: 'Runge-Kutta 4th Order (RK4)',
-        collision: 'Convex mesh & capsule contact dynamics with friction',
-        jacobian: 'J(q) Manipulator velocity mapping & Yoshikawa Singularity avoidance',
+        state: 'Named joint positions, link transforms, end-effector site, and contact count from MuJoCo forward kinematics',
+        control: 'Discrete action is applied by the planar task environment, then its joint and object positions are synchronized into the MuJoCo model',
+        scope: 'The controller does not currently step MuJoCo torque dynamics; this panel reports the synchronized digital-twin state',
       },
     },
   ];

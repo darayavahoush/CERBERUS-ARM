@@ -35,34 +35,41 @@ class NeuroSymbolicReasoningEngine:
     def parse_instruction(cls, instruction: str) -> Dict[str, Any]:
         """Convert natural language operator instructions into structured PDDL-style JSON."""
         lowered = instruction.lower()
+        target_clause = re.split(r"\b(?:to|into|in|towards?)\b", lowered, maxsplit=1)[0]
+        target_clause = target_clause or lowered
 
         # Detect target shape
         detected_shape = "cube"
         for word, shape in cls.SHAPE_MAP.items():
-            if re.search(r"\b" + re.escape(word) + r"\b", lowered):
+            if re.search(r"\b" + re.escape(word) + r"\b", target_clause):
                 detected_shape = shape
                 break
 
         # Detect target color
         detected_color = "crimson"
         for word, color in cls.COLOR_MAP.items():
-            if re.search(r"\b" + re.escape(word) + r"\b", lowered):
+            if re.search(r"\b" + re.escape(word) + r"\b", target_clause):
                 detected_color = color
                 break
 
         # Detect destination receptacle
+        destination_text = ""
+        destination_match = re.search(r"\b(?:to|into|in|towards?)\s+(?:the\s+)?(.+)$", lowered)
+        if destination_match:
+            destination_text = destination_match.group(1)
         detected_bin = "blue_bin"
-        if "red" in lowered or "left" in lowered:
+        if re.search(r"\b(?:bay\s*a|red\s+bin|left\s+(?:bin|bay)|crimson\s+bin)\b", destination_text):
             detected_bin = "red_bin"
-        elif "green" in lowered or "top" in lowered or "upper" in lowered:
+        elif re.search(r"\b(?:bay\s*c|green\s+bin|top\s+(?:bin|bay)|upper\s+(?:bin|bay)|center\s+(?:bin|bay))\b", destination_text):
             detected_bin = "green_bin"
-        elif "blue" in lowered or "right" in lowered:
+        elif re.search(r"\b(?:bay\s*b|blue\s+bin|right\s+(?:bin|bay)|cobalt\s+bin)\b", destination_text):
             detected_bin = "blue_bin"
 
         # Check safety/caution keywords
         cautious = any(w in lowered for w in ["careful", "cautious", "hazard", "slow", "delicate", "fragile"])
         fast = any(w in lowered for w in ["fast", "quick", "speed", "rapid", "rush"])
 
+        movement_style = "careful" if cautious else ("fast" if fast else "balanced")
         collision_pen = 40.0 if cautious else (15.0 if fast else 25.0)
         jerk_pen = 2.5 if cautious else (0.8 if fast else 1.5)
         step_pen = 0.25 if fast else 0.1
@@ -79,14 +86,13 @@ class NeuroSymbolicReasoningEngine:
             f"Grounded target query to visual entity [{detected_color} {detected_shape}] using spatial lexicon.",
             f"Resolved routing destination to receptacle [{detected_bin}] avoiding central hazard pillar at (0.0, 0.85).",
             f"Modulated DRL supervisory parameters: collision_penalty={collision_pen}, jerk_penalty={jerk_pen}.",
-            f"Enforced joint velocity damping along boundary reach envelope (R_max = 1.8m)."
+            f"Applied the {movement_style} movement profile with validated action safety constraints."
         ]
 
         safety_assessment = (
-            "Elevated safety protocol activated: central hazard zone at (0.0, 0.85) incurs strict angular deviation penalty; "
-            "elbow singularity near theta2=0 rad is actively repelled."
+            "Elevated safety protocol: the central hazard is checked along every discrete movement and low-manipulability poses are restricted."
             if cautious else
-            "Standard workspace envelope verified. Singularity threshold manipulability w > 0.05 enforced."
+            "Standard workspace envelope selected; collision and joint-limit action masks remain active."
         )
 
         return {
@@ -100,6 +106,7 @@ class NeuroSymbolicReasoningEngine:
                 "jerk_penalty": jerk_pen,
                 "step_penalty": step_pen,
             },
+            "movement_style": movement_style,
             "safety_assessment": safety_assessment,
             "reasoning_steps": reasoning_steps,
         }

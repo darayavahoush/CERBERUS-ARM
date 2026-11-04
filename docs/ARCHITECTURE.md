@@ -1,8 +1,8 @@
-# CERBERUS-ARM: System Architecture & Tri-Modal Decoupling
+# CERBERUS-ARM: System Architecture & Control Flow
 
-CERBERUS-ARM is structured around a three-tier decoupled autonomy paradigm inspired by the legendary three-headed guardian. Traditional embodied AI systems often suffer from catastrophic entanglement: when vision fails, the controller crashes; when language hallucinates, actuators execute hazardous ungrounded trajectories. 
+CERBERUS-ARM is a simulated three-module manipulation pipeline: perception, goal-conditioned control, and language-guided task planning. Each module exposes inspectable inputs and outputs so perception estimates, proposed plans, policy actions, and episode outcomes can be reviewed.
 
-CERBERUS resolves this vulnerability by establishing strict formal contracts between **Perception (The Eye)**, **Control (The Muscle)**, and **Reasoning (The Brain)**, connected via an asynchronous telemetry bus and coordinated through a real-time **MuJoCo 3D physics digital twin**.
+The local language model proposes a structured plan that is validated and grounded to objects and destinations in the active scene. The DRL policy selects discrete actions; a safety context can mask selected moves. The planar task environment applies actions and computes task rewards/collisions. MuJoCo receives synchronized joint/object state and returns forward-kinematic and contact telemetry for the Three.js digital twin; MuJoCo torque dynamics do not currently control the policy.
 
 ---
 
@@ -13,13 +13,13 @@ flowchart TD
     User["Operator Natural Language Prompt\n'Pick red cube into blue bin carefully'"] --> Head3["HEAD 3: THE BRAIN\nLocal Ollama (Llama 3.2) / Neuro-Symbolic Compiler"]
     
     subgraph BrainOutput ["Symbolic Specification & Modulation"]
-        PDDL["PDDL Subgoals:\n(Target: crimson cube, Dest: blue_bin)"]
+        PDDL["Validated JSON task plan:\n(Target: crimson cube, Dest: blue_bin)"]
         Weights["Supervisory Reward Weights:\nlambda_collision=35.0, lambda_jerk=2.5"]
     end
     Head3 --> PDDL
     Head3 --> Weights
 
-    Sensors["Simulated Workspace Camera / Sensors"] --> Head1["HEAD 1: THE EYE\nCoordConv Multi-Task CNN\n(1-Channel + CoordConv Layers)"]
+    Sensors["Rendered Workspace Image"] --> Head1["HEAD 1: THE EYE\nCoordConv Multi-Task CNN\n(RGB + X/Y coordinate channels)"]
     
     subgraph VisionOutput ["Perception Latents & Telemetry"]
         ClassPred["Classification Logits:\nShape & Color Probabilities"]
@@ -40,8 +40,9 @@ flowchart TD
         Head2 --> Policy
     end
 
-    Policy --> MuJoCo["PHYSICS & ACTUATION\nMuJoCo 3.17 + RK4 Integrator\nPlanar 3-DOF RRR Articulated Arm"]
-    MuJoCo --> State["State Vector s_{t+1} in R^18\nJoints (theta1, theta2, theta3), Tool, Torques"]
+    Policy --> TaskEnv["Discrete kinematic task environment\n3-DOF arm + collision checks"]
+    TaskEnv --> MuJoCo["MuJoCo synchronized model\nNamed joint/object state + forward transforms"]
+    MuJoCo --> State["Digital-twin telemetry\nqpos, link transforms, ee_3d, contacts"]
     State --> Sensors
 
     State --> Dashboard["HIGH-DPI COCKPIT\nThree.js 3D PBR Digital Twin\nNASA Telemetry & Q-Bars\nWeb Audio Sound Synthesizer"]
@@ -66,9 +67,9 @@ flowchart TD
 - **Detailed Reference**: See [docs/REINFORCEMENT_LEARNING.md](file:///Users/ananyasridhar/Desktop/projects/avi-ana/docs/REINFORCEMENT_LEARNING.md) and [docs/KINEMATICS.md](file:///Users/ananyasridhar/Desktop/projects/avi-ana/docs/KINEMATICS.md).
 
 ### Head 3: The Brain (Symbolic Reasoning & Forensic XAI)
-- **Role**: Converts high-level human intent into structured PDDL-style subgoals and dynamic supervisory weights; performs post-episode forensic debriefs.
+- **Role**: Converts high-level instructions into a validated target/destination plan and bounded safety guidance; can produce a post-episode telemetry explanation.
 - **Runtime**: Localhost Ollama inference (e.g. `llama3.2`, `mistral`, `deepseek-r1`) with a deterministic neuro-symbolic grammar fallback.
-- **Key Guarantee**: Complete isolation between reasoning and real-time joint actuation. If the LLM generates an invalid goal or hallucinates a non-existent object, the neuro-symbolic validator intercepts the directive before the physical arm is actuated.
+- **Safety boundary**: The plan validator checks the proposed target and destination against the scene and allowed schema. This reduces invalid-plan risk; it does not guarantee task success or zero collision.
 
 ---
 
@@ -76,18 +77,17 @@ flowchart TD
 
 | Subsystem | Frequency | Target Latency | Compute Platform |
 | :--- | :--- | :--- | :--- |
-| **MuJoCo RK4 Integrator** | 500 Hz | $< 0.5 \text{ ms}$ | CPU / C-extension |
-| **D3QN Action Selector** | 60 Hz | $< 4.0 \text{ ms}$ | PyTorch (MPS / CUDA / CPU) |
-| **CoordConv Multi-Task CNN** | 20 Hz (on-demand) | $< 18.0 \text{ ms}$ | PyTorch |
-| **Grad-CAM Extraction** | 10 Hz (on inspect) | $< 25.0 \text{ ms}$ | PyTorch Autograd |
-| **Three.js Digital Twin** | 60 FPS | $16.6 \text{ ms / frame}$ | WebGL 2.0 (Client GPU) |
-| **Ollama PDDL Compiler** | Asynchronous | $400 - 1200 \text{ ms}$ | Localhost Ollama |
-| **Ollama XAI Debrief** | Post-Episode | $800 - 1500 \text{ ms}$ | Localhost Ollama |
+| **MuJoCo state synchronization** | On reset / action | Not benchmarked | MuJoCo Python binding |
+| **D3QN action selector** | On demand | Not benchmarked | PyTorch (MPS / CUDA / CPU) |
+| **CoordConv CNN** | On demand | Not benchmarked | PyTorch |
+| **Grad-CAM extraction** | On inspection | Not benchmarked | PyTorch Autograd |
+| **Three.js digital twin** | Browser render loop | Device dependent | WebGL (client GPU) |
+| **Ollama planner** | On task request | Model / device dependent | Local Ollama or deterministic fallback |
 
 ---
 
 ## 🛡️ Failsafe & Zero-Collision Architecture
 
-1. **Analytical Boundary Clamping**: Joint angles are bounded by mechanical limits $\theta_1 \in [-45^\circ, 210^\circ]$, $\theta_2 \in [5^\circ, 165^\circ]$ before being passed to MuJoCo.
-2. **Hazard Envelope Detection**: Line-segment circle collision tests continuously check link 1, link 2, and the end-effector against the central hazard pillar.
-3. **Dynamic Supervisory Modulation**: When operator language includes tokens like `"carefully"`, `"hazard"`, or `"fragile"`, Head 3 scales $\lambda_{collision}$ from $25.0 \to 50.0$ and $\lambda_{jerk}$ from $1.5 \to 3.5$, biasing the DRL Q-network toward safe paths.
+1. **Joint boundary clamping**: The task environment clamps candidate joint angles to its configured joint ranges.
+2. **Swept hazard checks**: The task environment samples intermediate arm poses when checking actions against the central obstacle; the policy action context can mask moves that violate the configured clearance.
+3. **Language-conditioned guidance**: Validated language plans can tune bounded supervisory weights and action-shield constraints. These checks reduce risk but do not guarantee collision-free task completion; see [held-out results](TRAINING_RUN.md).

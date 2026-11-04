@@ -77,9 +77,10 @@ export default function Training() {
 
       <Panel title="Policy benchmark" icon={Trophy} actions={<button className="btn small" onClick={runBench} disabled={benchBusy || offline}>{benchBusy ? <Spinner /> : null} {rows.length ? 'Run again' : 'Run benchmark'}</button>}>
         {benchBusy && !rows.length ? <div className="col"><Skeleton h={22} /><Skeleton h={22} /><Skeleton h={22} /></div>
-          : rows.length === 0 ? <EmptyState title="Nothing to compare yet" body="The benchmark runs random movement, a standard D3QN and the full system on the same scenes. It can take a minute on the live backend." />
+          : rows.length === 0 ? <EmptyState title="Nothing to compare yet" body="The benchmark compares random actions, a geometric reference, and the shielded trained DQfD policy on the same task-balanced scenes." />
             : (
               <div className="col">
+                <p className="faint" style={{ fontSize: 12 }}>Matched scenes: {bench.matched_scenarios ?? rows[0]?.episodes ?? 0} · {bench.episodes_per_task ?? 'sample'} per task · seed {bench.seed ?? 'fixed sample'}{bench.timestamp ? ` · ${new Date(bench.timestamp).toLocaleString()}` : ''}</p>
                 <div style={{ height: 240 }}><ResponsiveContainer><BarChart data={rows} margin={{ left: -18 }}><CartesianGrid stroke="#e6eaf0" /><XAxis dataKey="policy_name" {...axis} /><YAxis domain={[0, 100]} {...axis} /><Tooltip /><Legend /><Bar dataKey="success_rate" name="Success %" fill="#17784d" isAnimationActive={false} /><Bar dataKey="collision_rate" name="Collision %" fill="#c7352b" isAnimationActive={false} /></BarChart></ResponsiveContainer></div>
                 <div className="tablewrap"><table><caption className="sr">Benchmark results by policy</caption><thead><tr><th>Policy</th><th>Episodes</th><th>Success %</th><th>Collision %</th><th>Mean return</th><th>Mean steps</th><th>Mean jerk</th></tr></thead>
                   <tbody>{rows.map((r) => <tr key={r.policy_name}><td><strong>{r.policy_name}</strong></td><td>{r.episodes}</td><td>{r.success_rate}</td><td>{r.collision_rate}</td><td>{r.mean_reward}</td><td>{r.mean_steps}</td><td>{r.mean_jerk}</td></tr>)}</tbody></table></div>

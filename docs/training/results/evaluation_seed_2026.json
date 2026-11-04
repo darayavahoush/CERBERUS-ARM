@@ -1,0 +1,104 @@
+{
+  "seed": 2026,
+  "episodes_per_task": 20,
+  "matched_scenarios": 60,
+  "policies": [
+    "random",
+    "geometric_reference",
+    "trained_d3qn"
+  ],
+  "checkpoint": "backend/data/checkpoints/d3qn_weights.pth",
+  "device": "cuda",
+  "metrics": [
+    {
+      "policy": "random",
+      "task_id": 1,
+      "episodes": 20,
+      "success_rate_pct": 0.0,
+      "collision_rate_pct": 85.0,
+      "mean_return": -42.8011,
+      "mean_steps": 48.15,
+      "mean_jerk": 2.92914
+    },
+    {
+      "policy": "random",
+      "task_id": 2,
+      "episodes": 20,
+      "success_rate_pct": 0.0,
+      "collision_rate_pct": 80.0,
+      "mean_return": -45.2139,
+      "mean_steps": 59.3,
+      "mean_jerk": 3.62773
+    },
+    {
+      "policy": "random",
+      "task_id": 3,
+      "episodes": 20,
+      "success_rate_pct": 0.0,
+      "collision_rate_pct": 80.0,
+      "mean_return": -47.1917,
+      "mean_steps": 60.1,
+      "mean_jerk": 3.5895
+    },
+    {
+      "policy": "geometric_reference",
+      "task_id": 1,
+      "episodes": 20,
+      "success_rate_pct": 75.0,
+      "collision_rate_pct": 0.0,
+      "mean_return": 94.6726,
+      "mean_steps": 54.3,
+      "mean_jerk": 2.412455
+    },
+    {
+      "policy": "geometric_reference",
+      "task_id": 2,
+      "episodes": 20,
+      "success_rate_pct": 75.0,
+      "collision_rate_pct": 0.0,
+      "mean_return": 126.3281,
+      "mean_steps": 73.9,
+      "mean_jerk": 4.087875
+    },
+    {
+      "policy": "geometric_reference",
+      "task_id": 3,
+      "episodes": 20,
+      "success_rate_pct": 85.0,
+      "collision_rate_pct": 0.0,
+      "mean_return": 101.2147,
+      "mean_steps": 45.9,
+      "mean_jerk": 2.489555
+    },
+    {
+      "policy": "trained_d3qn",
+      "task_id": 1,
+      "episodes": 20,
+      "success_rate_pct": 0.0,
+      "collision_rate_pct": 10.0,
+      "mean_return": 36.1293,
+      "mean_steps": 108.5,
+      "mean_jerk": 5.0004
+    },
+    {
+      "policy": "trained_d3qn",
+      "task_id": 2,
+      "episodes": 20,
+      "success_rate_pct": 0.0,
+      "collision_rate_pct": 20.0,
+      "mean_return": 68.6272,
+      "mean_steps": 98.35,
+      "mean_jerk": 4.1735
+    },
+    {
+      "policy": "trained_d3qn",
+      "task_id": 3,
+      "episodes": 20,
+      "success_rate_pct": 10.0,
+      "collision_rate_pct": 20.0,
+      "mean_return": 15.8698,
+      "mean_steps": 90.35,
+      "mean_jerk": 4.383395
+    }
+  ]
+}

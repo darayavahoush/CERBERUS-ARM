@@ -3,13 +3,17 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Box, Eye, Layers, Maximize2, Minimize2, RotateCcw, Video, Compass, Sparkles, ShieldCheck, Target } from 'lucide-react';
 import { radToDeg, RECEPTACLES, STAGE_COLORS, COMPONENT_LABELS, L1, L2, L3, MAX_REACH, MIN_REACH } from '../utils/kinematics';
+import { useTheme } from './ThemeProvider';
 
 export default function MuJoCoStage3D({
   observation: obs,
+  mujocoState = null,
   obstacles = [],
   trail = [],
   onSelect,
 }) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
   const rendererRef = useRef(null);
@@ -27,16 +31,16 @@ export default function MuJoCoStage3D({
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Extract kinematic angles for 3-DOF arm
-  const theta1 = obs?.theta1 ?? 0.52;
-  const theta2 = obs?.theta2 ?? 0.95;
-  const theta3 = obs?.theta3 ?? -0.42;
+  const theta1 = mujocoState?.available ? mujocoState.qpos?.joint1 ?? obs?.theta1 ?? 0.52 : obs?.theta1 ?? 0.52;
+  const theta2 = mujocoState?.available ? mujocoState.qpos?.joint2 ?? obs?.theta2 ?? 0.95 : obs?.theta2 ?? 0.95;
+  const theta3 = mujocoState?.available ? mujocoState.qpos?.joint3 ?? obs?.theta3 ?? -0.42 : obs?.theta3 ?? -0.42;
   const gripperClosed = obs?.gripper_closed ?? false;
   const isGrasped = obs && obs.grasped_idx !== null && obs.grasped_idx !== undefined;
   const targetIdx = obs?.target_idx ?? 0;
   const goalKey = obs?.goal_key || 'blue_bin';
 
   // Helper to create high-contrast canvas text sprite for 3D bay labels
-  const createTextSprite = (text, colorHex, bgColor = 'rgba(10, 15, 30, 0.85)') => {
+  const createTextSprite = (text, colorHex, bgColor = 'rgba(255, 255, 255, 0.96)') => {
     const canvas = document.createElement('canvas');
     canvas.width = 384;
     canvas.height = 96;
@@ -53,7 +57,7 @@ export default function MuJoCoStage3D({
 
     // Text label
     ctx.font = 'bold 30px "JetBrains Mono", "IBM Plex Sans", monospace';
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#1e293b';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 192, 48);
@@ -76,8 +80,8 @@ export default function MuJoCoStage3D({
 
     // Scene setup with atmospheric industrial lighting
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0e17);
-    scene.fog = new THREE.FogExp2(0x0a0e17, 0.07);
+    scene.background = new THREE.Color(isDark ? 0x101827 : 0xf1f5f9);
+    scene.fog = new THREE.FogExp2(isDark ? 0x101827 : 0xf1f5f9, 0.028);
     sceneRef.current = scene;
 
     // Perspective Camera (Z-up coordinate frame convention)
@@ -111,10 +115,10 @@ export default function MuJoCoStage3D({
     controlsRef.current = controls;
 
     // Studio Lighting Setup (PBR Key, Rim, and Fill Lights)
-    const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+    const ambient = new THREE.AmbientLight(0xffffff, 1.35);
     scene.add(ambient);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.35);
     keyLight.position.set(2.8, -2.8, 4.8);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 1024;
@@ -128,11 +132,11 @@ export default function MuJoCoStage3D({
     keyLight.shadow.bias = -0.0005;
     scene.add(keyLight);
 
-    const blueRimLight = new THREE.PointLight(0x38bdf8, 1.8, 8);
+    const blueRimLight = new THREE.PointLight(0x7dd3fc, 0.85, 8);
     blueRimLight.position.set(-2.6, 1.6, 2.2);
     scene.add(blueRimLight);
 
-    const amberFillLight = new THREE.PointLight(0xf59e0b, 1.1, 7);
+    const amberFillLight = new THREE.PointLight(0xfbbf24, 0.55, 7);
     amberFillLight.position.set(2.4, 2.2, 1.8);
     scene.add(amberFillLight);
 
@@ -140,9 +144,9 @@ export default function MuJoCoStage3D({
     // OPTICAL BREADBOARD TABLE SURFACE
     // ========================================================
     const tableMat = new THREE.MeshStandardMaterial({
-      color: 0x0f1522,
-      metalness: 0.5,
-      roughness: 0.55,
+      color: isDark ? 0x1a2637 : 0xf8fafc,
+      metalness: 0.12,
+      roughness: 0.82,
     });
     const tableGeo = new THREE.CircleGeometry(2.6, 64);
     const table = new THREE.Mesh(tableGeo, tableMat);
@@ -150,7 +154,7 @@ export default function MuJoCoStage3D({
     scene.add(table);
 
     // Industrial Metric Coordinate Grid (M6 tapped mounting hole matrix)
-    const grid = new THREE.GridHelper(5.2, 26, 0x1d4ed8, 0x1e293b);
+    const grid = new THREE.GridHelper(5.2, 26, isDark ? 0x52718c : 0x8da7c1, isDark ? 0x35465a : 0xd8e2ed);
     grid.rotation.x = Math.PI / 2;
     grid.position.z = 0.002;
     scene.add(grid);
@@ -161,7 +165,7 @@ export default function MuJoCoStage3D({
     const outerReachMat = new THREE.MeshBasicMaterial({
       color: 0x0ea5e9,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.42,
       side: THREE.DoubleSide,
     });
     const outerReachMesh = new THREE.Mesh(outerReachGeo, outerReachMat);
@@ -173,7 +177,7 @@ export default function MuJoCoStage3D({
     const innerDeadzoneMat = new THREE.MeshBasicMaterial({
       color: 0xef4444,
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.32,
       side: THREE.DoubleSide,
     });
     const innerDeadzoneMesh = new THREE.Mesh(innerDeadzoneGeo, innerDeadzoneMat);
@@ -238,11 +242,11 @@ export default function MuJoCoStage3D({
     const pillarMesh = new THREE.Mesh(
       new THREE.CylinderGeometry(0.20, 0.20, 0.56, 36),
       new THREE.MeshStandardMaterial({
-        color: 0xf59e0b,
+        color: 0xfbbf24,
         transparent: true,
-        opacity: 0.38,
-        roughness: 0.15,
-        metalness: 0.4,
+        opacity: 0.24,
+        roughness: 0.3,
+        metalness: 0.18,
       })
     );
     pillarMesh.rotation.x = Math.PI / 2;
@@ -253,7 +257,7 @@ export default function MuJoCoStage3D({
     // Glowing laser scanner ring
     const laserScannerRing = new THREE.Mesh(
       new THREE.RingGeometry(0.205, 0.23, 36),
-      new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xd97706, side: THREE.DoubleSide })
     );
     laserScannerRing.position.z = 0.30;
     hazardGroup.add(laserScannerRing);
@@ -261,14 +265,14 @@ export default function MuJoCoStage3D({
     // Tower Base Collar with Warning Chamfer
     const pillarBaseCollar = new THREE.Mesh(
       new THREE.CylinderGeometry(0.22, 0.25, 0.07, 36),
-      new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.9, roughness: 0.2 })
+      new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.72, roughness: 0.3 })
     );
     pillarBaseCollar.rotation.x = Math.PI / 2;
     pillarBaseCollar.position.z = 0.035;
     hazardGroup.add(pillarBaseCollar);
 
     // Spindle Warning Label Sprite
-    const hazardSprite = createTextSprite('⚠ LASER SPINDLE', '#f59e0b', 'rgba(30, 20, 5, 0.9)');
+    const hazardSprite = createTextSprite('⚠ LASER SPINDLE', '#b45309', 'rgba(255, 251, 235, 0.98)');
     hazardSprite.position.set(0, 0, 0.64);
     hazardGroup.add(hazardSprite);
 
@@ -281,9 +285,9 @@ export default function MuJoCoStage3D({
     scene.add(armRoot);
 
     // 1. Base Pedestal with Perimeter Bolt Flange
-    const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.9, roughness: 0.2 });
-    const carbonMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.85, roughness: 0.3 });
-    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.98, roughness: 0.08 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.72, roughness: 0.28 });
+    const carbonMat = new THREE.MeshStandardMaterial({ color: 0x172538, metalness: 0.68, roughness: 0.32 });
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.82, roughness: 0.18 });
     const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.92, roughness: 0.25 });
 
     const baseCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.26, 0.09, 40), baseMat);
@@ -554,7 +558,7 @@ export default function MuJoCoStage3D({
       controls.dispose();
       renderer.dispose();
     };
-  }, [isExpanded]);
+  }, [isExpanded, isDark]);
 
   // 2. Animate 3-DOF Arm Kinematics & Dynamic Gripper Jaws
   useEffect(() => {
@@ -602,6 +606,7 @@ export default function MuJoCoStage3D({
     if (!scene) return;
 
     const objects = obs?.objects || [];
+    const mujocoObjects = mujocoState?.available ? Object.values(mujocoState.object_positions_3d || {}) : [];
     const current3D = objects3DRef.current;
 
     // Remove old meshes that no longer exist
@@ -623,50 +628,155 @@ export default function MuJoCoStage3D({
         meshGroup = new THREE.Group();
         let geom;
         let mat;
+        const accentMat = new THREE.MeshStandardMaterial({ color: colHex, metalness: 0.58, roughness: 0.27 });
+        const brassDetailMat = new THREE.MeshStandardMaterial({ color: 0xd6a64f, metalness: 0.82, roughness: 0.22 });
+        const darkDetailMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.55, roughness: 0.38 });
 
         if (obj.shape === 'cube') {
-          // Micro-Module IC Package (Matte graphite body with gold leads)
+          // IC package: graphite housing, colored ceramic lid, gold perimeter leads.
           geom = new THREE.BoxGeometry(0.082, 0.082, 0.075);
           mat = new THREE.MeshStandardMaterial({
-            color: 0x1f2937,
-            metalness: 0.85,
-            roughness: 0.25,
+            color: 0x26364a,
+            metalness: 0.68,
+            roughness: 0.31,
           });
         } else if (obj.shape === 'sphere') {
-          // High-Purity Quartz Lens (Refractive crystal sphere)
+          // Quartz lens: refractive body, inner optic, and concentric calibration rings.
           geom = new THREE.SphereGeometry(0.050, 28, 28);
           mat = new THREE.MeshPhysicalMaterial({
             color: colHex,
-            metalness: 0.1,
-            roughness: 0.08,
-            transmission: 0.75,
+            metalness: 0.04,
+            roughness: 0.12,
+            transmission: 0.42,
             ior: 1.52,
             clearcoat: 1.0,
+            clearcoatRoughness: 0.08,
           });
         } else if (obj.shape === 'triangle') {
-          // Dispersive Optical Prism (Triangular glass prism)
+          // Prism: triangular glass body, three edge rails, and etched optical face marks.
           geom = new THREE.CylinderGeometry(0.055, 0.055, 0.08, 3);
           mat = new THREE.MeshPhysicalMaterial({
             color: colHex,
-            metalness: 0.2,
-            roughness: 0.1,
-            transmission: 0.65,
+            metalness: 0.08,
+            roughness: 0.16,
+            transmission: 0.28,
             clearcoat: 0.9,
           });
+        } else if (obj.shape === 'star') {
+          // Fiducial hub: five point star shell with a raised central optical sensor.
+          const star = new THREE.Shape();
+          for (let point = 0; point < 10; point++) {
+            const radius = point % 2 === 0 ? 0.062 : 0.029;
+            const angle = -Math.PI / 2 + point * Math.PI / 5;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            if (point === 0) star.moveTo(x, y);
+            else star.lineTo(x, y);
+          }
+          star.closePath();
+          geom = new THREE.ExtrudeGeometry(star, {
+            depth: 0.034,
+            bevelEnabled: true,
+            bevelThickness: 0.004,
+            bevelSize: 0.003,
+            bevelSegments: 2,
+            curveSegments: 4,
+          });
+          mat = new THREE.MeshStandardMaterial({ color: colHex, metalness: 0.62, roughness: 0.25 });
         } else {
-          // Multi-Axis Sensor Hub (Hexagonal sensor pod)
+          // Six-axis sensor pod: anodized shell, perimeter screws, and glass sensor window.
           geom = new THREE.CylinderGeometry(0.052, 0.052, 0.075, 6);
           mat = new THREE.MeshStandardMaterial({
             color: colHex,
-            metalness: 0.8,
-            roughness: 0.2,
+            metalness: 0.72,
+            roughness: 0.26,
           });
         }
 
         const componentMesh = new THREE.Mesh(geom, mat);
+        if (obj.shape === 'triangle' || (obj.shape !== 'cube' && obj.shape !== 'sphere' && obj.shape !== 'star')) {
+          componentMesh.rotation.x = Math.PI / 2;
+        }
+        if (obj.shape === 'sphere') componentMesh.position.z = 0.01;
+        if (obj.shape === 'star') componentMesh.position.z = -0.034;
         componentMesh.castShadow = true;
         componentMesh.receiveShadow = true;
         meshGroup.add(componentMesh);
+
+        if (obj.shape === 'cube') {
+          const lid = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.054, 0.009), accentMat);
+          lid.position.z = 0.041;
+          lid.castShadow = true;
+          meshGroup.add(lid);
+          const marker = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.004, 0.002), brassDetailMat);
+          marker.position.set(0, 0, 0.047);
+          meshGroup.add(marker);
+          for (let side = -1; side <= 1; side += 2) {
+            for (let pin = -1; pin <= 1; pin++) {
+              const lead = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.007, 0.004), brassDetailMat);
+              lead.position.set(pin * 0.024, side * 0.044, -0.022);
+              meshGroup.add(lead);
+            }
+          }
+          const lowerEdge = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.004, 0.003), darkDetailMat);
+          lowerEdge.position.set(0, -0.043, 0.005);
+          meshGroup.add(lowerEdge);
+        } else if (obj.shape === 'sphere') {
+          const innerOptic = new THREE.Mesh(new THREE.SphereGeometry(0.018, 20, 20), new THREE.MeshPhysicalMaterial({ color: 0xffffff, emissive: 0x93c5fd, emissiveIntensity: 0.28, roughness: 0.12, metalness: 0.08 }));
+          innerOptic.position.set(-0.008, 0.004, 0.025);
+          meshGroup.add(innerOptic);
+          const equator = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0025, 8, 36), brassDetailMat);
+          equator.position.z = 0.002;
+          meshGroup.add(equator);
+          const meridian = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0017, 8, 36), accentMat);
+          meridian.rotation.x = Math.PI / 2;
+          meridian.position.z = 0.01;
+          meshGroup.add(meridian);
+        } else if (obj.shape === 'triangle') {
+          const edgeBand = new THREE.Mesh(new THREE.CylinderGeometry(0.0565, 0.0565, 0.006, 3), brassDetailMat);
+          edgeBand.rotation.x = Math.PI / 2;
+          edgeBand.position.z = 0.038;
+          meshGroup.add(edgeBand);
+          const faceMark = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.026, 3), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.72, roughness: 0.18 }));
+          faceMark.rotation.z = Math.PI;
+          faceMark.position.set(0, 0, 0.049);
+          meshGroup.add(faceMark);
+          for (let edge = 0; edge < 3; edge++) {
+            const angle = edge * Math.PI * 2 / 3;
+            const pin = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 10, 10), brassDetailMat);
+            pin.position.set(Math.cos(angle) * 0.05, Math.sin(angle) * 0.05, 0.03);
+            meshGroup.add(pin);
+          }
+        } else if (obj.shape === 'star') {
+          const sensorSocket = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.024, 0.009, 16), brassDetailMat);
+          sensorSocket.rotation.x = Math.PI / 2;
+          sensorSocket.position.z = 0.018;
+          meshGroup.add(sensorSocket);
+          const sensorGlass = new THREE.Mesh(new THREE.SphereGeometry(0.014, 18, 18), new THREE.MeshPhysicalMaterial({ color: 0xe0f2fe, emissive: colHex, emissiveIntensity: 0.2, roughness: 0.1, clearcoat: 1 }));
+          sensorGlass.position.z = 0.027;
+          meshGroup.add(sensorGlass);
+          for (let point = 0; point < 5; point++) {
+            const angle = -Math.PI / 2 + point * Math.PI * 2 / 5;
+            const screw = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 8), brassDetailMat);
+            screw.position.set(Math.cos(angle) * 0.048, Math.sin(angle) * 0.048, 0.008);
+            meshGroup.add(screw);
+          }
+        } else {
+          const sensorCap = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.009, 6), brassDetailMat);
+          sensorCap.rotation.x = Math.PI / 2;
+          sensorCap.position.z = 0.04;
+          meshGroup.add(sensorCap);
+          const sensorWindow = new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 16), new THREE.MeshPhysicalMaterial({ color: 0xe0f2fe, emissive: colHex, emissiveIntensity: 0.24, roughness: 0.1, clearcoat: 1 }));
+          sensorWindow.position.z = 0.05;
+          meshGroup.add(sensorWindow);
+          for (let bolt = 0; bolt < 6; bolt++) {
+            const angle = bolt * Math.PI / 3;
+            const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.004, 6), brassDetailMat);
+            screw.rotation.x = Math.PI / 2;
+            screw.position.set(Math.cos(angle) * 0.044, Math.sin(angle) * 0.044, 0.04);
+            meshGroup.add(screw);
+          }
+        }
 
         // Component Base Ring Fiducial
         const baseRing = new THREE.Mesh(
@@ -681,7 +791,8 @@ export default function MuJoCoStage3D({
       }
 
       // Synchronize Cartesian position & rotation
-      meshGroup.position.set(obj.x, obj.y, 0.04);
+      const mujocoObject = mujocoObjects[idx];
+      meshGroup.position.set(mujocoObject?.[0] ?? obj.x, mujocoObject?.[1] ?? obj.y, 0.04);
       if (obj.rotation) meshGroup.rotation.z = obj.rotation;
 
       // Position floating target reticle above active target component
@@ -694,7 +805,7 @@ export default function MuJoCoStage3D({
     if (objects.length === 0 && targetReticleRef.current) {
       targetReticleRef.current.visible = false;
     }
-  }, [obs?.objects, targetIdx]);
+  }, [obs?.objects, targetIdx, mujocoState?.object_positions_3d]);
 
   // 4. Update Trajectory Ribbon
   useEffect(() => {
@@ -732,21 +843,21 @@ export default function MuJoCoStage3D({
   };
 
   return (
-    <div className={`relative w-full rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-2xl flex flex-col transition-all duration-300 ${isExpanded ? 'h-[640px]' : 'h-[500px]'}`}>
+    <div className={`stage-3d relative w-full rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-xl shadow-slate-300/40 flex flex-col transition-all duration-300 ${isDark ? 'is-dark' : ''} ${isExpanded ? 'h-[640px]' : 'h-[500px]'}`}>
       {/* 1. TOP HEADER BAR: Dedicated Flex Row with Zero Text Collision */}
-      <div className="px-3.5 py-2.5 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md flex items-center justify-between gap-3 z-20 flex-wrap">
+      <div className="px-3.5 py-2.5 bg-white/95 border-b border-slate-200 backdrop-blur-md flex items-center justify-between gap-3 z-20 flex-wrap">
         {/* Left Side: Clean Engineering Badge */}
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 text-xs font-mono font-bold rounded-md bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 shadow-sm">
-            <Box className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="px-2.5 py-1 text-xs font-mono font-bold rounded-md bg-cyan-50 text-cyan-800 border border-cyan-200 flex items-center gap-1.5 shadow-sm">
+            <Box className="w-3.5 h-3.5 text-cyan-700" />
             CERBERUS 3-DOF
           </span>
-          <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-800/90 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            500Hz RK4
+          <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            MuJoCo synced
           </span>
-          <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-800/90 text-slate-400 border border-slate-700 hidden sm:inline-flex items-center gap-1">
-            <Target className="w-3 h-3 text-cyan-400" />
+          <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-50 text-slate-600 border border-slate-200 hidden sm:inline-flex items-center gap-1">
+            <Target className="w-3 h-3 text-cyan-700" />
             Cleanroom Sort
           </span>
         </div>
@@ -756,7 +867,7 @@ export default function MuJoCoStage3D({
           <button
             onClick={() => setPreset('iso')}
             className={`px-2.5 py-1 rounded-md border transition-all cursor-pointer ${
-              cameraMode === 'iso' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+              cameraMode === 'iso' ? 'bg-cyan-50 text-cyan-800 border-cyan-300 font-bold' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             Perspective
@@ -764,7 +875,7 @@ export default function MuJoCoStage3D({
           <button
             onClick={() => setPreset('top')}
             className={`px-2.5 py-1 rounded-md border transition-all cursor-pointer ${
-              cameraMode === 'top' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+              cameraMode === 'top' ? 'bg-cyan-50 text-cyan-800 border-cyan-300 font-bold' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             Top-Down
@@ -772,7 +883,7 @@ export default function MuJoCoStage3D({
           <button
             onClick={() => setPreset('side')}
             className={`px-2.5 py-1 rounded-md border transition-all cursor-pointer ${
-              cameraMode === 'side' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+              cameraMode === 'side' ? 'bg-cyan-50 text-cyan-800 border-cyan-300 font-bold' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             Side
@@ -780,7 +891,7 @@ export default function MuJoCoStage3D({
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1.5 rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:text-white hover:border-cyan-500/50 transition-all ml-1 cursor-pointer"
+            className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:text-cyan-800 hover:border-cyan-300 transition-all ml-1 cursor-pointer"
             title={isExpanded ? "Collapse Viewport" : "Maximize Widescreen Viewport"}
           >
             {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -795,16 +906,16 @@ export default function MuJoCoStage3D({
         {/* Floating Minimalist Telemetry Chip (Top-Right of Canvas) */}
         {obs && (
           <div className="absolute top-2.5 right-3 z-10 pointer-events-none flex items-center gap-2 font-mono text-[11.5px]">
-            <span className="px-2.5 py-1 rounded-md bg-slate-900/90 text-amber-300 border border-amber-500/30 backdrop-blur-md shadow-md">
-              J1: {radToDeg(obs.theta1)}° · J2: {radToDeg(obs.theta2)}° · J3: {radToDeg(obs.theta3 ?? -0.42)}°
+            <span className="px-2.5 py-1 rounded-md bg-white/95 text-amber-800 border border-amber-300 backdrop-blur-md shadow-sm">
+              {mujocoState?.available ? 'MuJoCo state' : 'Analytical fallback'} · J1: {radToDeg(theta1)}° · J2: {radToDeg(theta2)}° · J3: {radToDeg(theta3)}° · {mujocoState?.n_contacts ?? 0} contacts
             </span>
             <span
               className={`px-2.5 py-1 rounded-md border backdrop-blur-md font-semibold text-[11px] ${
                 isGrasped
-                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+                  ? 'bg-emerald-50/95 text-emerald-800 border-emerald-300 shadow-sm'
                   : gripperClosed
-                  ? 'bg-rose-950/90 text-rose-300 border-rose-500/50'
-                  : 'bg-slate-900/90 text-cyan-300 border-cyan-500/30'
+                  ? 'bg-rose-50/95 text-rose-800 border-rose-300'
+                  : 'bg-white/95 text-cyan-800 border-cyan-300'
               }`}
             >
               {isGrasped ? 'PARALLEL CLAMP LOCKED' : gripperClosed ? 'JAWS CLOSED' : 'SEEKING'}
@@ -814,13 +925,13 @@ export default function MuJoCoStage3D({
       </div>
 
       {/* 3. DEDICATED BOTTOM WORKCELL BAR (Completely outside the canvas) */}
-      <div className="px-4 py-2 bg-slate-900/95 border-t border-slate-800 text-xs font-mono text-slate-400 flex items-center justify-between flex-wrap gap-2 z-20">
+      <div className="px-4 py-2 bg-white/95 border-t border-slate-200 text-xs font-mono text-slate-600 flex items-center justify-between flex-wrap gap-2 z-20">
         <div className="flex items-center gap-3">
-          <span className="text-cyan-400">
+          <span className="text-cyan-800">
             Manipulability w(q): {(obs?.manipulability ?? 0.76).toFixed(3)}
           </span>
-          <span className="text-slate-600">|</span>
-          <span className="text-slate-300 font-semibold">
+          <span className="text-slate-300">|</span>
+          <span className="text-slate-700 font-semibold">
             Target Bay: {RECEPTACLES[goalKey]?.label || goalKey}
           </span>
         </div>
@@ -832,7 +943,7 @@ export default function MuJoCoStage3D({
           <span>·</span>
           <span>Zoom: Scroll</span>
           <span>·</span>
-          <span className="text-cyan-400/80">MuJoCo 3.17 RK4 Synced</span>
+          <span className="text-cyan-800">MuJoCo joint & object state</span>
         </div>
       </div>
     </div>

@@ -70,8 +70,8 @@ class RoboticArmEnv:
         l1: float = 0.90,
         l2: float = 0.70,
         l3: float = 0.35,
-        delta_theta: float = math.radians(5.0),  # 5° per micro-step
-        max_steps: int = 80,
+        delta_theta: float = math.radians(7.5),  # 7.5° discrete joint primitive
+        max_steps: int = 120,
         seed: Optional[int] = 42,
     ):
         if seed is not None:
@@ -137,6 +137,72 @@ class RoboticArmEnv:
         8: Hold / Idle
         """
         return 9
+
+    def build_drl_action_context(
+        self,
+        minimum_clearance_m: float = 0.045,
+        minimum_manipulability: float = 0.05,
+        supervisory_weights: Optional[Dict[str, float]] = None,
+        micro_alignment_bias: float = 0.015,
+    ) -> Dict[str, List[Any]]:
+        """Build a language-conditioned safety mask and smoothness prior for DQN scoring."""
+        weights = supervisory_weights or self.supervisory_weights
+        mask = [True] * self.action_space_size
+        angles = (self.theta1, self.theta2, self.theta3)
+        current_w = self.kinematics.manipulability(self.theta2, self.theta3)
+        obstacle = self.obstacles[0]
+        inflated_radius = obstacle["radius"] + max(0.0, float(minimum_clearance_m))
+
+        for action in (*range(6), 7):
+            candidate = list(angles)
+            if action < 6:
+                axis = action // 2
+                candidate[axis] += self.delta_theta * (1 if action % 2 == 0 else -1)
+            else:
+                candidate[0] += self.delta_theta * 0.4
+                candidate[1] -= self.delta_theta * 0.4
+                candidate[2] += self.delta_theta * 0.2
+            candidate = self.kinematics.clamp_angles(*candidate)
+            collides = self.kinematics.check_swept_collision_circle(
+                angles, candidate, obstacle["x"], obstacle["y"], inflated_radius
+            )
+            candidate_w = self.kinematics.manipulability(candidate[1], candidate[2])
+            singularity_worsens = candidate_w < minimum_manipulability and candidate_w <= current_w
+            no_motion = all(abs(a - b) < 1e-8 for a, b in zip(angles, candidate))
+            mask[action] = not (collides or singularity_worsens or no_motion)
+
+        if not self.gripper_closed:
+            fk = self.kinematics.forward_kinematics(*angles)
+            target = self.objects[self.target_object_idx]
+            target_dist = math.hypot(fk["ee"][0] - target["x"], fk["ee"][1] - target["y"])
+            other_near = any(
+                idx != self.target_object_idx
+                and math.hypot(fk["ee"][0] - obj["x"], fk["ee"][1] - obj["y"]) < 0.16
+                for idx, obj in enumerate(self.objects)
+            )
+            mask[6] = target_dist < 0.16 and not other_near
+
+        # Preserve an escape action if a strict language constraint blocks all
+        # motion; the DQN still selects the action and the environment remains fail-safe.
+        if not any(mask):
+            mask[8] = True
+
+        jerk_weight = max(0.0, float(weights.get("jerk_penalty", 1.5)))
+        bias = [0.0] * self.action_space_size
+        for action in (*range(6), 7):
+            candidate = list(angles)
+            if action < 6:
+                axis = action // 2
+                candidate[axis] += self.delta_theta * (1 if action % 2 == 0 else -1)
+            else:
+                candidate[0] += self.delta_theta * 0.4
+                candidate[1] -= self.delta_theta * 0.4
+                candidate[2] += self.delta_theta * 0.2
+            candidate = self.kinematics.clamp_angles(*candidate)
+            jerk = sum((after - before) ** 2 for before, after in zip(angles, candidate)) * 5.0
+            bias[action] = -min(5.0, jerk_weight * jerk * 4.0)
+        bias[7] += max(0.0, float(micro_alignment_bias))
+        return {"action_mask": mask, "action_bias": bias}
 
     def generate_random_sample_space(
         self,
@@ -413,8 +479,10 @@ class RoboticArmEnv:
 
         # Check collision with central laser inspection spindle
         obs = self.obstacles[0]
-        collision = self.kinematics.check_collision_circle(
-            self.theta1, self.theta2, self.theta3, obs["x"], obs["y"], obs["radius"]
+        collision = self.kinematics.check_swept_collision_circle(
+            (self.prev_theta1, self.prev_theta2, self.prev_theta3),
+            (self.theta1, self.theta2, self.theta3),
+            obs["x"], obs["y"], obs["radius"],
         )
 
         if collision:

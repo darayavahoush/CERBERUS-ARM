@@ -26,21 +26,21 @@
 </p>
 
 <p align="center">
-  An autonomous 3-DOF articulated robotic manipulation platform engineered for cleanroom micro-assembly and precision optical component sorting. Powered by spatial computer vision (CoordConv CNN), local state-machine reasoning (LangGraph + Ollama), goal-conditioned deep reinforcement learning (D3QN + HER), and a real-time 500Hz MuJoCo physics digital twin.
+  A simulated 3-DOF robotic manipulation project for cleanroom-style component sorting. It combines CoordConv perception, local LangGraph + Ollama task planning, a DQfD-style Dueling Double-DQN with HER, and a MuJoCo-synchronized 3D digital twin.
 </p>
 
 ---
 
 ## 🏛️ System Architecture
 
-CERBERUS unifies three distinct neural intelligences into a single embodied physical agent:
+CERBERUS combines three software modules in a simulated manipulation pipeline:
 
 ```mermaid
 flowchart TD
     User["Operator Natural Language Directive\n'Sort red micro-module into Bay A (SMT Staging) carefully'"] --> Head3["HEAD 3: THE BRAIN\nLocal Ollama (Qwen2.5 / Llama 3.2)\nLangGraph State Machine Orchestrator"]
     
     subgraph BrainOutput ["Symbolic Specification & Modulation"]
-        PDDL["PDDL Subgoals:\n(Target: crimson cube, Dest: Bay A)\nSub-tasks: Approach -> Align -> Grasp -> Transfer -> Dock"]
+        PDDL["Validated structured task plan:\n(Target: crimson cube, Dest: Bay A)\nSubgoals + bounded safety guidance"]
         Weights["Dynamic Supervisory Penalties:\nlambda_collision=35.0, lambda_jerk=2.5, lambda_step=0.1"]
     end
     Head3 --> PDDL
@@ -58,7 +58,7 @@ flowchart TD
     Head1 --> GradCAM
 
     PDDL --> Head2
-    Weights --> MuJoCo
+    Weights --> TaskEnv
     Centroids --> Head2
 
     subgraph Manipulation ["HEAD 2: THE MUSCLE"]
@@ -67,8 +67,9 @@ flowchart TD
         Head2 --> Policy
     end
 
-    Policy --> MuJoCo["PHYSICS & ACTUATION\nMuJoCo 3.17 + RK4 Integrator (500 Hz)\n3-DOF Articulated Planar Manipulator\nL1=0.90m, L2=0.70m, L3=0.35m"]
-    MuJoCo --> State["Physical State Telemetry\nqpos [theta1, theta2, theta3], Torques, Contacts, ee_3d"]
+    Policy --> TaskEnv["Discrete kinematic task environment\n3-DOF arm + collision checks"]
+    TaskEnv --> MuJoCo["MuJoCo synchronized model\nNamed joint/object state + forward transforms"]
+    MuJoCo --> State["Digital-twin telemetry\nqpos, link transforms, ee_3d, contacts"]
     State --> Sensors
 
     State --> Dashboard["EXECUTIVE MISSION COCKPIT\nThree.js WebGL PBR Digital Twin (OrbitControls)\nNASA Telemetry, Q-Bars & Voice Assistant\nWeb Audio Sound Synthesizer"]
@@ -78,9 +79,9 @@ flowchart TD
 
 ---
 
-## 🏭 Real-World Application: Cleanroom Optical Sorting Workcell
+## 🏭 Simulated Cleanroom-Style Sorting Workcell
 
-CERBERUS-ARM is specifically tailored for high-precision, vibration-free micro-component sortation in Class-100 semiconductor cleanrooms and optical alignment workcells:
+The simulated scene represents a cleanroom-style component sorting task. It is not a validated physical workcell or deployment claim:
 
 ### 1. Dedicated Sorting Stations
 - **Bay A · SMT Staging (`[-1.25, 0.45] m`, Crimson)**: Infeed assembly bay for surface-mount integrated circuits and passive hybrid packages.
@@ -91,39 +92,39 @@ CERBERUS-ARM is specifically tailored for high-precision, vibration-free micro-c
 - **Laser Metrology Spindle (`[0.00, 0.85] m`, $R=0.20\text{ m}$)**: Heavy vertical optical inspection tower with an active vertical laser safety light curtain that the arm must circumnavigate without collision.
 
 ### 3. Dynamic Cleanroom Sample Space (Randomized on Reset)
-On every scene reset, a randomized non-overlapping sample space of 4–6 precision industrial components is spawned within the reachable annular workspace ($r \in [0.72, 1.55]\text{ m}$):
+On every scene reset, four components are sampled within the workspace:
 - **Micro-Module IC Packages (Cubes)**: Matte graphite metallic bodies with gold alignment pin leads.
 - **Quartz Focusing Lenses (Spheres)**: High-purity refractive crystal spheres with anti-reflective coating.
 - **Dispersive Optical Prisms (Triangles)**: Polished optical crown glass triangular prisms for spectral beam steering.
-- **Multi-Axis Sensor Hubs (Hexagons)**: Anodized gold sensor pods with hermetically sealed optical apertures.
+- **Fiducial Sensor Stars**: Five-point sensor bodies with a central optic.
 
 ---
 
 ## 🔬 Core Innovations
 
-### 1. 🦾 3-DOF Articulated Manipulator & MuJoCo Digital Twin (`MuJoCoStage3D`)
-- **3-DOF Kinematic Chain**: Shoulder Yaw ($\theta_1$, Link $L_1 = 0.90\text{ m}$), Elbow Pitch ($\theta_2$, Link $L_2 = 0.70\text{ m}$), and active Wrist Pitch ($\theta_3$, Link $L_3 = 0.35\text{ m}$) enabling independent end-effector tool orientation control $\phi_{ee} = \theta_1 + \theta_2 + \theta_3$.
-- **High-Fidelity RK4 Integrator**: 500 Hz multi-body dynamics solving joint velocities, frictional contacts, and actuator constraints.
-- **Three.js WebGL Digital Twin**: Real-time 60 FPS PBR rendering featuring industrial carbon-fiber finishes, chrome hydraulic actuators, brass pivot bearings, dynamic shadows, and live joint rotation callout pins.
+### 1. 🦾 3-DOF Manipulator & MuJoCo-Synchronized Digital Twin (`MuJoCoStage3D`)
+- **3-DOF Kinematic Chain**: Shoulder, elbow, and wrist joints use link lengths $L_1 = 0.90\text{ m}$, $L_2 = 0.70\text{ m}$, and $L_3 = 0.35\text{ m}$.
+- **MuJoCo state**: The backend synchronizes named joint and object positions, calls MuJoCo forward kinematics, and returns link, end-effector, and contact telemetry. Discrete task actions are still applied by the planar environment; MuJoCo torque dynamics do not currently drive the controller.
+- **Three.js WebGL Digital Twin**: Interactive browser rendering with detailed materials, lighting, shadows, joint callouts, and scene overlays.
 - **OrbitControls Navigation**: Smooth click-to-orbit, right-click pan, and scroll-zoom with camera preset shortcuts (`Perspective 3D`, `Top-Down Plan`, `Side Elevation`).
 - **Tactical Overlays**: Downward targeting laser beam, floor crosshair reticle, floating target bracket, contact spark halos, and glowing ghost trajectory ribbons.
 
 ### 2. 👁️ Head 1: The Eye (CoordConv Multi-Task CNN)
 - **Coordinate Grounding (Liu et al., NeurIPS 2018)**: Concatenates explicit normalized Cartesian coordinate channels $[X, Y]$ to input frames, breaking convolutional translation invariance.
-- **Simultaneous Multi-Task Inference**: Simultaneously classifies shape, classifies color, and regresses continuous sub-pixel centroids $(\hat{x}, \hat{y})$ in $4.2\text{ ms}$.
+- **Simultaneous Multi-Task Inference**: Classifies shape and color and regresses normalized object coordinates. Measured synthetic validation metrics are documented in [TRAINING_RUN.md](docs/TRAINING_RUN.md).
 - **Grad-CAM Attention Heatmaps**: Real-time gradient-weighted activation mapping exposes where the convolutional backbone focuses during perception.
 - **Multi-Filter Vision HUD**: Interactive filter modes (RGB Video, Grad-CAM attention heatmap, synthetic depth, and tactical crosshair target lock).
 
 ### 3. ⚡ Head 2: The Muscle (Dueling Double-DQN + HER)
 - **Dueling Decomposition**: Decouples state value $V(s)$ from the action advantage stream $A(s, a)$ to stabilize training across identical states.
 - **Double-Q Evaluation**: Eliminates policy overestimation bias by separating action selection from target network evaluation.
-- **Hindsight Experience Replay (HER, $k=4$)**: Retroactively relabels failed pick-and-place trajectories into virtual successes, accelerating sparse-reward convergence by $>10\times$.
-- **Singularity Avoidance & Jerk Regularization**: Continuous Yoshikawa manipulability metric $w(q) = \sqrt{\det(J(q) J(q)^T)}$ and angular acceleration penalties ensure smooth trajectories away from kinematic deadlocks.
+- **Hindsight Experience Replay (HER, $k=4$)**: Stores valid future object positions as alternate goals for replay.
+- **DQfD + action safety shield**: Expert-margin supervision trains from demonstrations; swept-collision and manipulability checks can mask unsafe actions.
 - **9 Discrete Action Primitives**: Shoulder $\pm\Delta\theta$, Elbow $\pm\Delta\theta$, Wrist $\pm\Delta\theta$, Gripper Toggle, Micro-Align, and Hold.
 
 ### 4. 🧠 Head 3: The Brain (Local LangGraph Reasoner & XAI)
-- **Localhost LLM Inference**: Fully autonomous offline execution via Ollama (`qwen2.5:3b-instruct` / `llama3.2`) orchestrated by LangGraph state machines with zero cloud dependencies.
-- **Structured PDDL Subgoals**: Translates ambiguous human instructions into deterministic physical subgoals.
+- **Local Ollama Inference**: When a local Ollama model is available, LangGraph uses it to propose a validated structured task plan; deterministic parsing is available as a fallback.
+- **Structured task plan**: Grounds a requested object and destination and supplies bounded safety guidance; it does not execute PDDL.
 - **Dynamic Supervisory Modulation**: Adjusts safety penalties dynamically (e.g. elevating $\lambda_{collision}$ and $\lambda_{jerk}$ when the user specifies caution).
 - **Post-Hoc XAI Forensic Debriefs**: Grounded natural language explanations generated from telemetry logs explaining successes or collisions.
 
@@ -135,26 +136,27 @@ On every scene reset, a randomized non-overlapping sample space of 4–6 precisi
 
 ---
 
-## 📊 Empirical Policy Benchmark Results
+## 📊 Held-out Policy Evaluation
 
-Evaluation conducted across 15 randomized cleanroom pick-and-place trials per policy with fixed obstacle geometry:
+Matched evaluation on 60 generated scenes (20 per task, seed 2027). The learned policy uses the action safety shield. It improves over random but remains behind the geometric reference; see [the full run log](docs/TRAINING_RUN.md) and per-episode data in `docs/training/results/`.
 
 | Policy Architecture | Success Rate | Collision Rate | Mean Return | Mean Steps | Mean Jerk Index |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Random Exploration Baseline** | 6.7% | 46.7% | -34.80 | 80.0 | 14.20 |
-| **Standard D3QN (No HER, Static)** | 53.3% | 20.0% | +18.40 | 44.5 | 6.80 |
-| **CERBERUS Full Tri-Modal (Ours)** | **86.7%** | **6.7%** | **+48.90** | **28.2** | **3.10** |
+| **Random** | 0.0% | 81.7% | -42.49 | 55.0 | 3.328 |
+| **Geometric reference** | 78.3% | 0.0% | +109.92 | 61.1 | 3.265 |
+| **Trained DQfD + safety shield** | 28.3% | 0.0% | +68.46 | 101.3 | 3.116 |
 
 ---
 
 ## 📚 Technical Documentation
 
 Explore deep dive technical specifications in [`docs/`](docs/):
-- **[System Architecture](docs/ARCHITECTURE.md)**: Tri-modal decoupling contracts, latency benchmarks, and failsafe guarantees.
+- **[System Architecture](docs/ARCHITECTURE.md)**: Current module boundaries, telemetry, and safety checks.
 - **[Kinematics & Differential Geometry](docs/KINEMATICS.md)**: 3-DOF forward/inverse kinematics, analytical $3\times 3$ Jacobian, and Yoshikawa manipulability $w(q)$.
 - **[Perception & Grad-CAM](docs/PERCEPTION.md)**: CoordConv coordinate injection, multi-task losses, and Grad-CAM backpropagation.
 - **[Reinforcement Learning Formulation](docs/REINFORCEMENT_LEARNING.md)**: 18-dim state space, 9 discrete action primitives, dueling network layers, Double-Q targets, and HER relabeling.
-- **[MuJoCo 3D Physics Digital Twin](docs/MUJOCO_PHYSICS.md)**: MJCF specification, RK4 500 Hz integrator, contact manifolds, and Three.js PBR rendering.
+- **[MuJoCo 3D Digital Twin](docs/MUJOCO_PHYSICS.md)**: MJCF model, synchronized joint/object state, MuJoCo forward transforms, and Three.js rendering. The learned controller currently acts through discrete kinematic steps.
+- **[Training run and evaluation](docs/TRAINING_RUN.md)**: Reproduction commands, CNN metrics, DQfD training telemetry, and held-out results.
 - **[Frontend Architecture Guide](docs/FRONTEND.md)**: Design system, state synchronization, audio synthesis, and image generation.
 
 ---
@@ -208,7 +210,7 @@ PYTHONPATH=. .venv/bin/python scripts/train_d3qn.py
 | :--- | :--- | :--- |
 | `GET` | `/api/status` | Returns system health, device (MPS/CUDA), model status, and hyperparameters. |
 | `GET` | `/api/mujoco/state` | Returns real-time 3D MuJoCo multi-body state, joint torques, and contact points. |
-| `POST` | `/api/task/plan` | Compiles natural language command into structured JSON PDDL subgoals via Ollama / LangGraph. |
+| `POST` | `/api/task/plan` | Compiles a natural-language command into a validated structured plan via local Ollama or deterministic fallback. |
 | `POST` | `/api/env/reset` | Resets 3-DOF arm to home position and spawns randomized cleanroom sample space. |
 | `POST` | `/api/env/step` | Advances simulation by 1 timestep using D3QN policy or manual joint primitive. |
 | `POST` | `/api/perception/inspect` | Runs CoordConv CNN feature extraction and returns Grad-CAM attention heatmap. |

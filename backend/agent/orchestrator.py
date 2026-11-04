@@ -36,6 +36,11 @@ class CerberusAgentState(TypedDict):
     # PDDL Task Plan
     plan: Dict[str, Any]
     supervisory_weights: Dict[str, float]
+    policy_guidance: Dict[str, Any]
+    target_grounding: Dict[str, Any]
+    policy_learning: Dict[str, Any]
+    replay_episode: List[Dict[str, Any]]
+    safety_interventions: int
 
     # Pre-flight Kinematics & Safety
     safety_assessment: Dict[str, Any]
@@ -82,6 +87,8 @@ class LangGraphCerberusOrchestrator:
         # Register nodes
         workflow.add_node("perceive_workspace", self.node_perceive)
         workflow.add_node("plan_task_qwen", self.node_plan)
+        workflow.add_node("validate_task_plan", self.node_validate_plan)
+        workflow.add_node("ground_target_and_goal", self.node_ground_goal)
         workflow.add_node("validate_safety", self.node_validate_safety)
         workflow.add_node("replan_with_caution", self.node_replan_with_caution)
         workflow.add_node("execute_d3qn_policy", self.node_execute)
@@ -90,7 +97,9 @@ class LangGraphCerberusOrchestrator:
         # Define graph edges
         workflow.add_edge(START, "perceive_workspace")
         workflow.add_edge("perceive_workspace", "plan_task_qwen")
-        workflow.add_edge("plan_task_qwen", "validate_safety")
+        workflow.add_edge("plan_task_qwen", "validate_task_plan")
+        workflow.add_edge("validate_task_plan", "ground_target_and_goal")
+        workflow.add_edge("ground_target_and_goal", "validate_safety")
 
         # Conditional branching based on safety & singularity pre-flight check
         workflow.add_conditional_edges(
@@ -103,7 +112,9 @@ class LangGraphCerberusOrchestrator:
         )
 
         workflow.add_edge("replan_with_caution", "execute_d3qn_policy")
-        workflow.add_edge("execute_d3qn_policy", "explain_forensics_xai")
+        workflow.add_node("learn_from_episode", self.node_learn_from_episode)
+        workflow.add_edge("execute_d3qn_policy", "learn_from_episode")
+        workflow.add_edge("learn_from_episode", "explain_forensics_xai")
         workflow.add_edge("explain_forensics_xai", END)
 
         return workflow.compile()
@@ -125,8 +136,11 @@ class LangGraphCerberusOrchestrator:
         self.cnn_model.eval()
         with torch.no_grad():
             _, shape_logits, color_logits, coords = self.cnn_model(tensor)
-            pred_s = int(torch.argmax(shape_logits, dim=-1).item())
-            pred_c = int(torch.argmax(color_logits, dim=-1).item())
+            shape_probs = torch.softmax(shape_logits, dim=-1)
+            color_probs = torch.softmax(color_logits, dim=-1)
+            pred_s = int(torch.argmax(shape_probs, dim=-1).item())
+            pred_c = int(torch.argmax(color_probs, dim=-1).item())
+            confidence = float(torch.minimum(shape_probs.max(), color_probs.max()).item())
             pred_xy = coords.squeeze().cpu().numpy().tolist()
 
         logs = list(state.get("trace_logs", []))
@@ -140,7 +154,9 @@ class LangGraphCerberusOrchestrator:
                 "pred_shape_idx": pred_s,
                 "pred_color_idx": pred_c,
                 "pred_coordinates": pred_xy,
-                "confidence": 0.97,
+                "shape_confidence": float(shape_probs.max().item()),
+                "color_confidence": float(color_probs.max().item()),
+                "confidence": confidence,
             },
             "detected_objects": obs.get("objects", []),
             "trace_logs": logs,
@@ -153,24 +169,6 @@ class LangGraphCerberusOrchestrator:
 
         plan = await self.ollama.compile_task(instruction, model_name=model)
 
-        # Synchronize dynamic weights to the environment
-        weights = plan.get("supervisory_weights", {
-            "collision_penalty": 25.0,
-            "jerk_penalty": 1.5,
-            "step_penalty": 0.1,
-        })
-        for k, v in weights.items():
-            if k in self.env.supervisory_weights and isinstance(v, (int, float)):
-                self.env.supervisory_weights[k] = float(v)
-
-        # Configure environment target goal based on compiled plan
-        self.env.reset(
-            task_id=state.get("task_id", 1),
-            target_shape=plan.get("target_shape"),
-            target_color=plan.get("target_color"),
-            target_bin=plan.get("destination_bin"),
-        )
-
         logs = list(state.get("trace_logs", []))
         logs.append(
             f"[Head 3: Cognition] Qwen plan compiled via {plan.get('source')}: "
@@ -180,35 +178,107 @@ class LangGraphCerberusOrchestrator:
 
         return {
             "plan": plan,
-            "supervisory_weights": weights,
+            "supervisory_weights": plan.get("supervisory_weights", {}),
             "trace_logs": logs,
         }
+
+    async def node_validate_plan(self, state: CerberusAgentState) -> Dict[str, Any]:
+        """Validate target ontology, bins, reward bounds, and DRL constraints before use."""
+        try:
+            plan = self.ollama.validate_task_plan(
+                state.get("plan", {}),
+                state["instruction"],
+                source=state.get("plan", {}).get("source", "validated_fallback"),
+            )
+        except (TypeError, ValueError):
+            fallback = self.ollama.validate_task_plan(
+                {}, state["instruction"], source="neuro_symbolic_validated_fallback"
+            )
+            plan = fallback
+        weights = plan["supervisory_weights"]
+        for key, value in weights.items():
+            self.env.supervisory_weights[key] = float(value)
+        guidance = {
+            "movement_style": plan["movement_style"],
+            **plan["execution_constraints"],
+            "subgoals": list(plan["subgoals"]),
+            "action_shield": "swept_collision_and_singularity_mask",
+        }
+        logs = list(state.get("trace_logs", []))
+        logs.append(
+            f"[Plan Validator] Accepted {plan['target_color']} {plan['target_shape']} -> {plan['destination_bin']}; "
+            f"style={plan['movement_style']}, collision={weights['collision_penalty']:.1f}, "
+            f"clearance>={guidance['minimum_clearance_m']:.3f}m, w(q)>={guidance['minimum_manipulability']:.2f}."
+        )
+        return {"plan": plan, "supervisory_weights": weights, "policy_guidance": guidance, "trace_logs": logs}
+
+    async def node_ground_goal(self, state: CerberusAgentState) -> Dict[str, Any]:
+        """Ground the validated symbolic target into the simulator's object registry."""
+        plan = state["plan"]
+        obs = self.env.reset(
+            task_id=state.get("task_id", 1),
+            target_shape=plan["target_shape"],
+            target_color=plan["target_color"],
+            target_bin=plan["destination_bin"],
+        )
+        target = obs["target_object"]
+        matched = target["shape"] == plan["target_shape"] and target["color"] == plan["target_color"]
+        if not matched:
+            raise ValueError("Validated target could not be grounded in the simulated scene")
+        grounding = {
+            "object_id": target["id"],
+            "shape": target["shape"],
+            "color": target["color"],
+            "object_position": [target["x"], target["y"]],
+            "destination_bin": self.env.target_receptacle_key,
+            "destination_position": list(self.env.goal_pos),
+            "phase": "approach_target",
+        }
+        logs = list(state.get("trace_logs", []))
+        logs.append(
+            f"[Goal Grounding] {grounding['object_id']} resolved at ({target['x']:.3f}, {target['y']:.3f})m; "
+            f"destination {grounding['destination_bin']} at ({self.env.goal_pos[0]:.2f}, {self.env.goal_pos[1]:.2f})m."
+        )
+        return {"target_grounding": grounding, "trace_logs": logs}
 
     async def node_validate_safety(self, state: CerberusAgentState) -> Dict[str, Any]:
         """Node 3: Kinematic Singularity (Yoshikawa) and Obstacle Clearance Check."""
         theta1, theta2 = self.env.theta1, self.env.theta2
-        w = self.env.kinematics.manipulability(theta2)
-        ee_pos = self.env.kinematics.forward_kinematics(theta1, theta2)["ee"]
+        w = self.env.kinematics.manipulability(theta2, self.env.theta3)
 
-        # Check distance to central obstacle
-        dist_to_hazard = float("inf")
-        for obst in self.env.obstacles:
-            d = math.hypot(ee_pos[0] - obst["x"], ee_pos[1] - obst["y"]) - obst["radius"]
-            dist_to_hazard = min(dist_to_hazard, d)
-
-        is_safe = (w >= 0.05) and (dist_to_hazard > 0.10)
+        # Check the full arm footprint and the actual DRL action mask.
+        guidance = state.get("policy_guidance", {})
+        obstacle = self.env.obstacles[0]
+        clearance = self.env.kinematics.circle_clearance(
+            theta1, theta2, self.env.theta3,
+            obstacle["x"], obstacle["y"], obstacle["radius"],
+        )
+        action_context = self.env.build_drl_action_context(
+            minimum_clearance_m=float(guidance.get("minimum_clearance_m", 0.045)),
+            minimum_manipulability=float(guidance.get("minimum_manipulability", 0.05)),
+            supervisory_weights=state.get("supervisory_weights", {}),
+            micro_alignment_bias=float(guidance.get("micro_alignment_bias", 0.015)),
+        )
+        safe_action_count = sum(action_context["action_mask"])
+        is_safe = (
+            w >= float(guidance.get("minimum_manipulability", 0.05))
+            and clearance >= 0.0
+            and safe_action_count > 0
+        )
 
         logs = list(state.get("trace_logs", []))
         logs.append(
             f"[Pre-Flight Kinematics] Yoshikawa Manipulability w(q)={w:.4f} (threshold=0.05). "
-            f"Hazard Clearance={dist_to_hazard:.3f}m. Safety Status={'SAFE' if is_safe else 'RISK_DETECTED'}"
+            f"Link Clearance={clearance:.3f}m; {safe_action_count} DRL actions pass the shield. "
+            f"Safety Status={'SAFE' if is_safe else 'RISK_DETECTED'}"
         )
 
         return {
             "safety_assessment": {
                 "manipulability": round(w, 4),
-                "hazard_clearance": round(dist_to_hazard, 3),
+                "hazard_clearance": round(clearance, 3),
                 "is_safe": is_safe,
+                "safe_action_count": safe_action_count,
             },
             "is_safe": is_safe,
             "trace_logs": logs,
@@ -221,12 +291,17 @@ class LangGraphCerberusOrchestrator:
     async def node_replan_with_caution(self, state: CerberusAgentState) -> Dict[str, Any]:
         """Contingency Node: Elevate supervisory safety weights if risk was flagged."""
         weights = dict(state.get("supervisory_weights", {}))
-        weights["collision_penalty"] = max(weights.get("collision_penalty", 25.0) * 1.5, 40.0)
-        weights["jerk_penalty"] = max(weights.get("jerk_penalty", 1.5) * 2.0, 3.0)
+        weights["collision_penalty"] = min(50.0, max(weights.get("collision_penalty", 25.0) * 1.5, 40.0))
+        weights["jerk_penalty"] = min(5.0, max(weights.get("jerk_penalty", 1.5) * 1.5, 3.0))
 
         for k, v in weights.items():
             if k in self.env.supervisory_weights:
                 self.env.supervisory_weights[k] = float(v)
+
+        guidance = dict(state.get("policy_guidance", {}))
+        guidance["minimum_clearance_m"] = min(0.12, float(guidance.get("minimum_clearance_m", 0.045)) + 0.025)
+        guidance["minimum_manipulability"] = min(0.20, float(guidance.get("minimum_manipulability", 0.05)) + 0.025)
+        guidance["micro_alignment_bias"] = max(float(guidance.get("micro_alignment_bias", 0.015)), 0.04)
 
         logs = list(state.get("trace_logs", []))
         logs.append(
@@ -236,38 +311,71 @@ class LangGraphCerberusOrchestrator:
 
         return {
             "supervisory_weights": weights,
+            "policy_guidance": guidance,
             "trace_logs": logs,
         }
 
     async def node_execute(self, state: CerberusAgentState) -> Dict[str, Any]:
-        """Node 4: Goal-Conditioned D3QN Policy Execution Loop with HER Logging."""
-        max_steps = state.get("max_execution_steps", 40)
+        """Execute DQN-selected actions under the validated language safety shield."""
+        max_steps = min(int(state.get("max_execution_steps", self.env.max_steps)), self.env.max_steps)
         obs = self.env.get_observation()
+        spawn = dict(obs["target_object"])
         total_reward = 0.0
         trajectory = []
+        replay_episode = []
         status = "timeout"
         jerk_acc = 0.0
+        safety_interventions = 0
+        masked_action_total = 0
+        guidance = state.get("policy_guidance", {})
 
         for step in range(1, max_steps + 1):
-            action, q_vals = self.agent.select_action(obs["vector"], evaluate=True)
+            action_context = self.env.build_drl_action_context(
+                minimum_clearance_m=float(guidance.get("minimum_clearance_m", 0.045)),
+                minimum_manipulability=float(guidance.get("minimum_manipulability", 0.05)),
+                supervisory_weights=state.get("supervisory_weights", {}),
+                micro_alignment_bias=float(guidance.get("micro_alignment_bias", 0.015)),
+            )
+            action_mask = action_context["action_mask"]
+            action, q_vals = self.agent.select_action(
+                obs["vector"], evaluate=True,
+                action_mask=action_mask,
+                action_bias=action_context["action_bias"],
+            )
+            raw_action = int(np.argmax(q_vals))
+            masked_action_total += len(action_mask) - sum(action_mask)
+            if not action_mask[raw_action]:
+                safety_interventions += 1
+
             obs_next, r, term, trunc, info = self.env.step(action)
             total_reward += r
             jerk_acc += info.get("jerk", 0.0)
-
-            # Store transition in HER buffer
-            self.agent.replay_buffer.push(
-                obs["vector"],
-                action,
-                r,
-                obs_next["vector"],
-                term,
-            )
+            target_object = obs_next["target_object"]
+            object_xy = (float(target_object["x"]), float(target_object["y"]))
+            moved = math.hypot(object_xy[0] - spawn["x"], object_xy[1] - spawn["y"]) > 1e-4
+            replay_episode.append({
+                "state": list(obs["vector"]),
+                "action": action,
+                "reward": r,
+                "next_state": list(obs_next["vector"]),
+                "done": bool(term or trunc),
+                "achieved_goal": object_xy,
+                "desired_goal": tuple(self.env.goal_pos),
+                "goal_scale": float(self.env.kinematics.max_reach),
+                "her_valid": bool(target_object.get("is_grasped", False) or moved),
+                "is_collision": bool(info.get("is_collision", False)),
+                "expert": False,
+            })
 
             trajectory.append({
                 "step": step,
                 "action": action,
+                "policy_phase": "transit_safe" if self.env.grasped_object_idx is not None else "approach_target",
                 "reward": round(r, 3),
                 "ee_pos": obs_next["fk"]["ee"],
+                "safe_action_count": sum(action_mask),
+                "q_values": [round(float(value), 4) for value in q_vals],
+                "supervisory_bias": [round(float(value), 4) for value in action_context["action_bias"]],
             })
 
             obs = obs_next
@@ -286,7 +394,8 @@ class LangGraphCerberusOrchestrator:
         logs = list(state.get("trace_logs", []))
         logs.append(
             f"[Head 2: D3QN Policy] Execution completed in {len(trajectory)} steps. "
-            f"Status={status.upper()}. Cumulative Return={total_reward:.2f}. Avg Jerk={avg_jerk}"
+            f"Status={status.upper()}. Return={total_reward:.2f}; avg jerk={avg_jerk}; "
+            f"safety interventions={safety_interventions}; masked actions={masked_action_total}."
         )
 
         return {
@@ -296,8 +405,35 @@ class LangGraphCerberusOrchestrator:
             "jerk_index": avg_jerk,
             "trajectory": trajectory,
             "final_observation": obs,
+            "replay_episode": replay_episode,
+            "safety_interventions": safety_interventions,
+            "policy_guidance": {**guidance, "masked_action_total": masked_action_total},
             "trace_logs": logs,
         }
+
+    async def node_learn_from_episode(self, state: CerberusAgentState) -> Dict[str, Any]:
+        """Feed real outcomes through HER and bounded online DQN updates."""
+        transitions = state.get("replay_episode", [])
+        if transitions:
+            self.agent.replay_buffer.store_episode_with_her(transitions, self.env.compute_her_reward)
+        losses = []
+        for _ in range(min(4, max(1, len(transitions) // 16))):
+            loss = self.agent.update()
+            if loss is not None:
+                losses.append(loss)
+        feedback = {
+            "transitions_added": len(transitions),
+            "replay_size": len(self.agent.replay_buffer),
+            "updates": len(losses),
+            "mean_loss": round(float(np.mean(losses)), 6) if losses else None,
+            "last_update_step": self.agent.total_steps,
+        }
+        logs = list(state.get("trace_logs", []))
+        logs.append(
+            f"[DRL Feedback] Added {feedback['transitions_added']} outcome transitions and HER relabels; "
+            f"replay={feedback['replay_size']}, gradient updates={feedback['updates']}, loss={feedback['mean_loss']}."
+        )
+        return {"policy_learning": feedback, "replay_episode": [], "trace_logs": logs}
 
     async def node_explain(self, state: CerberusAgentState) -> Dict[str, Any]:
         """Node 5: Post-Hoc Explainable AI (XAI) Forensics Debrief with Qwen 2.5."""
@@ -308,7 +444,9 @@ class LangGraphCerberusOrchestrator:
             "steps": state.get("steps_taken", 0),
             "reward": state.get("cumulative_reward", 0.0),
             "jerk": state.get("jerk_index", 0.0),
-            "cnn_confidence": state.get("perception", {}).get("confidence", 0.95),
+            "cnn_confidence": state.get("perception", {}).get("confidence", 0.0),
+            "safety_interventions": state.get("safety_interventions", 0),
+            "minimum_clearance_m": state.get("safety_assessment", {}).get("hazard_clearance"),
         }
 
         explanation = await self.ollama.explain_telemetry(telemetry, model_name=model)
@@ -326,7 +464,7 @@ class LangGraphCerberusOrchestrator:
         instruction: str,
         task_id: int = 1,
         model_name: str = "qwen2.5:3b-instruct",
-        max_steps: int = 40,
+        max_steps: int = 120,
     ) -> Dict[str, Any]:
         """Execute full autonomous LangGraph lifecycle for a given user prompt."""
         initial_state: CerberusAgentState = {
@@ -338,6 +476,11 @@ class LangGraphCerberusOrchestrator:
             "detected_objects": [],
             "plan": {},
             "supervisory_weights": {},
+            "policy_guidance": {},
+            "target_grounding": {},
+            "policy_learning": {},
+            "replay_episode": [],
+            "safety_interventions": 0,
             "safety_assessment": {},
             "is_safe": True,
             "execution_status": "pending",

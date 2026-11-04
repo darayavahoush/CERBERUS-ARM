@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { MarketingShell } from '../components/Shell';
 import HeroDemo from '../components/HeroDemo';
+import SuperheroComic from '../components/SuperheroComic';
 import { Img } from '../components/ui';
 
 const AIBrainPipeline = lazy(() => import('../components/AIBrainPipeline'));
@@ -57,20 +58,20 @@ const HEADS = [
     icon: Eye,
     img: 'head-eye',
     title: 'Spatial Visual Grounding',
-    body: 'Injects explicit Cartesian coordinate channels [X, Y] into the convolutional feature maps (Liu et al., NeurIPS 2018), breaking translational invariance to simultaneously classify shapes, classify colors, and regress sub-millimeter continuous component centroids (x̂, ŷ).',
-    badge: '4.2 ms · 98.4% Acc',
+    body: 'Injects explicit Cartesian coordinate channels [X, Y] into convolutional feature maps, then predicts component shape, color, and normalized position from each rendered workspace image.',
+    badge: 'Shape · color · XY',
     features: ['Grad-CAM Attention Heatmaps', 'Multi-Task Loss Balancing', 'Sub-Pixel Centroid Regression'],
   },
   {
     k: 'Head 2: The Muscle',
-    subtitle: '3-DOF Dueling Double-DQN + HER',
+    subtitle: 'DQfD · Dueling Double-DQN + HER',
     c: '#10b981',
     icon: Zap,
     img: 'head-muscle',
     title: 'Reinforcement Learning Policy',
-    body: 'A goal-conditioned Dueling Double-DQN agent trained with Hindsight Experience Replay (HER, k=4). Employs an 18-dimensional state vector and 9 discrete 3-DOF actuation primitives, actively penalizing kinematic singularities via Yoshikawa manipulability w(q) and jerk regularizers.',
-    badge: '0.8 ms · 500Hz RK4',
-    features: ['3-DOF Articulated Kinematics', 'Hindsight Goal Relabeling', 'Singularity Avoidance w(q)'],
+    body: 'A goal-conditioned Dueling Double-DQN learns from both reward and expert demonstrations. Hindsight Experience Replay adds useful goals from each trajectory, while a language-conditioned safety shield masks unsafe actions before the policy moves.',
+    badge: '9 actions · HER + DQfD',
+    features: ['Expert-Margin Policy Learning', 'Hindsight Goal Relabeling', 'Swept-Collision Action Shield'],
   },
   {
     k: 'Head 3: The Brain',
@@ -79,16 +80,16 @@ const HEADS = [
     icon: Brain,
     img: 'head-brain',
     title: 'Neuro-Symbolic Task Planning',
-    body: 'An autonomous local state machine powered by Ollama (Qwen2.5 / Llama 3.2) that parses natural language instructions into deterministic PDDL subgoals, dynamically tunes safety penalty weights (λ_coll, λ_jerk), and generates post-hoc Explainable AI (XAI) forensic debriefs.',
-    badge: '118 ms · Zero Cloud',
-    features: ['LangGraph State Machine', 'Dynamic Reward Modulation', 'Forensic XAI Debriefs'],
+    body: 'A local LangGraph supervisor compiles instructions into validated object, destination, subgoal, and safety constraints. Those constraints tune reward shaping and an action shield; the DQN still chooses each environment action.',
+    badge: 'Local Ollama · guarded plans',
+    features: ['Plan Validation & Goal Grounding', 'Language-Conditioned Action Mask', 'Outcome Feedback to DRL'],
   },
 ];
 
 const BENCH = [
-  { name: 'Random Exploration', success: 6.7, collision: 46.7, jerk: 82.4 },
-  { name: 'Standard D3QN (No HER)', success: 53.3, collision: 20.0, jerk: 34.1 },
-  { name: 'CERBERUS Tri-Modal (Ours)', success: 86.7, collision: 6.7, jerk: 11.2 },
+  { name: 'Random', success: 0, collision: 81.7, jerk: 3.328 },
+  { name: 'Geometric reference', success: 78.3, collision: 0, jerk: 3.265 },
+  { name: 'Trained DQfD + shield', success: 28.3, collision: 0, jerk: 3.116 },
 ];
 
 const WORKCELL_BAYS = [
@@ -119,26 +120,26 @@ const COMPONENTS = [
   {
     name: 'Micro-Module IC',
     shape: 'Cube',
-    desc: 'Graphite metallic multi-pin integrated circuit package with laser-etched fiducials.',
+    desc: 'Graphite package, color-coded lid, gold leads, and a keyed alignment mark.',
     color: '#94a3b8',
   },
   {
     name: 'Quartz Focusing Lens',
     shape: 'Sphere',
-    desc: 'High-purity refractive optical crystal sphere with anti-reflective coating.',
+    desc: 'Refractive quartz shell with inner optic and concentric calibration rings.',
     color: '#38bdf8',
   },
   {
     name: 'Dispersive Optical Prism',
     shape: 'Triangular Prism',
-    desc: 'Polished optical crown glass prism for spectral dispersion and beam steering.',
+    desc: 'Triangular optical glass with a facet marker and three fiducial corners.',
     color: '#f43f5e',
   },
   {
-    name: 'Multi-Axis Sensor Hub',
-    shape: 'Hexagon',
-    desc: 'Anodized gold sensor housing with hermetically sealed optical aperture.',
-    color: '#f59e0b',
+    name: 'Fiducial Sensor Star',
+    shape: 'Five-point star',
+    desc: 'Anodized five-point pod with a central glass sensor and five fasteners.',
+    color: '#10b981',
   },
 ];
 
@@ -157,7 +158,7 @@ export default function Home() {
             <div className="row wrap" style={{ gap: 8 }}>
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 shadow-sm">
                 <Box className="w-3.5 h-3.5 text-cyan-400" />
-                CERBERUS-ARM // SYSTEM V2.4
+                CERBERUS-ARM // CLEANROOM HERO
               </span>
               <span className="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -167,18 +168,18 @@ export default function Home() {
 
             <div className="col" style={{ gap: 6 }}>
               <h1 style={{ fontSize: 'clamp(2.4rem, 4.6vw, 3.8rem)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.03em' }}>
-                The Three-Headed <br />
+                Three intelligence heads. <br />
                 <span style={{ color: 'var(--blueprint-2)', textShadow: '0 0 24px rgba(42, 68, 181, 0.25)' }}>
-                  Robotic Intelligence.
+                  One cleanroom hero.
                 </span>
               </h1>
               <p style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--ink-2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                Vision. Reasoning. Manipulation.
+                See. Think. Pick. Place.
               </p>
             </div>
 
             <p className="lead" style={{ fontSize: '1.08rem', lineHeight: 1.65, color: 'var(--ink-2)' }}>
-              An autonomous 3-DOF articulated robotic manipulator designed for cleanroom micro-assembly and optical component sorting. Powered by spatial CoordConv computer vision, localhost LangGraph reasoning, goal-conditioned D3QN+HER reinforcement learning, and a real-time 500Hz MuJoCo physics digital twin.
+              Meet CERBERUS: an original robotic-arm superhero for delicate cleanroom sorting. Its vision CNN spots the target, a local LangGraph brain sets the mission and safety rules, and a goal-conditioned DQfD policy chooses how the arm moves.
             </p>
 
             {/* CTAs */}
@@ -208,21 +209,21 @@ export default function Home() {
             >
               <div>
                 <div style={{ fontFamily: 'var(--display)', fontSize: '1.45rem', fontWeight: 800, color: 'var(--blueprint-2)' }}>
-                  500 Hz
+                  3D
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>RK4 Multi-Body Physics</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>MuJoCo Digital Twin</div>
               </div>
               <div style={{ borderLeft: '1px solid var(--rule)', paddingLeft: 16 }}>
                 <div style={{ fontFamily: 'var(--display)', fontSize: '1.45rem', fontWeight: 800, color: '#10b981' }}>
-                  86.7%
+                  3
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>Cleanroom Sort Success</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>Destination Bays</div>
               </div>
               <div style={{ borderLeft: '1px solid var(--rule)', paddingLeft: 16 }}>
                 <div style={{ fontFamily: 'var(--display)', fontSize: '1.45rem', fontWeight: 800, color: '#f59e0b' }}>
-                  0.4 mm
+                  9
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>IK End-Effector Precision</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>Discrete Actions</div>
               </div>
               <div style={{ borderLeft: '1px solid var(--rule)', paddingLeft: 16 }}>
                 <div style={{ fontFamily: 'var(--display)', fontSize: '1.45rem', fontWeight: 800, color: 'var(--ink)' }}>
@@ -235,11 +236,13 @@ export default function Home() {
 
           {/* Right Hero Column: Interactive Live 3-DOF 3D Twin Demo */}
           <div className="col hero-visual" style={{ width: '100%' }}>
-            <div className="hero-demo-frame"><div className="demo-topline"><span className="demo-mark"><Activity size={13} /> CERBERUS <i>LIVE SIMULATION</i></span><span className="demo-window"><i /><i /><i /></span></div><HeroDemo /></div>
+            <div className="hero-demo-frame"><div className="demo-topline"><span className="demo-mark"><Activity size={13} /> CERBERUS <i>SEEDED SAMPLE MISSION</i></span><span className="demo-window"><i /><i /><i /></span></div><HeroDemo /></div>
           </div>
         </div>
-        <div className="hero-facts sect"><span>BUILT FOR CURIOUS MAKERS</span><div><b>3</b> cooperating intelligence heads</div><div><b>500</b> Hz MuJoCo physics</div><div><b>Local-first</b> reasoning</div></div>
+        <div className="hero-facts sect"><span>SUPERPOWERS, WITH SAFETY CHECKS</span><div><b>Vision</b> finds the target</div><div><b>Shield</b> blocks collisions</div><div><b>DQN</b> chooses the move</div></div>
       </section>
+
+      <SuperheroComic />
 
       {/* 2. THE THREE CERBERUS HEADS (TRI-MODAL DEEP INTELLIGENCE) */}
       <section className="sect" aria-labelledby="heads-heading" style={{ paddingTop: 32 }}>
@@ -381,14 +384,14 @@ export default function Home() {
             Interactive AI Brain & Execution Pipeline
           </h2>
           <p className="lead" style={{ maxWidth: '64ch' }}>
-            Click on any pipeline node below to inspect real-time tensor dimensions, inference latency, loss formulations, and paper citations.
+            Click a node to explore the model flow, tensor shapes, and learning methods. Latencies and live values shown in the illustration are examples, not measured run telemetry.
           </p>
         </div>
 
         <DeferredPipeline
           busy={false}
-          perceptionConfidence={0.984}
-          manipulability={0.762}
+          perceptionConfidence={0.964}
+          manipulability={0.707}
           epsilon={0.05}
         />
       </section>
@@ -399,30 +402,30 @@ export default function Home() {
           <div className="col" style={{ gap: 16 }}>
             <span className="pill ok" style={{ fontWeight: 700, fontSize: 12, alignSelf: 'flex-start' }}>EMPIRICAL RIGOR</span>
             <h2 id="benchmarks-heading" style={{ fontSize: 'clamp(1.7rem, 3vw, 2.3rem)' }}>
-              86.7% Success Rate. <br />
-              7× Collision Reduction.
+              Held-out results, clearly reported. <br />
+              28.3% learned success. Still improving.
             </h2>
             <p className="muted" style={{ fontSize: '1.02rem', lineHeight: 1.65 }}>
-              On the project’s 15-scene reference evaluation, CERBERUS combines hindsight replay with motion-safety penalties to raise placement success and reduce collisions. Explore the shipped results below, then rerun the experiment from Training.
+              Measured on 60 matched held-out scenes (20 per task, seed 2027). The shielded DQfD policy improved to 28.3% success with no collisions; the geometric reference reached 78.3%. The learned policy is improving, and the remaining transfer gap stays visible.
             </p>
 
             <div className="col" style={{ gap: 10 }}>
               <div className="row" style={{ gap: 10 }}>
                 <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#10b981', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>
                 <span style={{ fontSize: 14, color: 'var(--ink)' }}>
-                  <strong>Hindsight Experience Replay (HER):</strong> Converts 100% of missed grasps into virtual successes via goal relabeling.
+                  <strong>Hindsight Experience Replay (HER):</strong> Relabels valid achieved object positions as alternate goals for replay.
                 </span>
               </div>
               <div className="row" style={{ gap: 10 }}>
                 <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#10b981', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>
                 <span style={{ fontSize: 14, color: 'var(--ink)' }}>
-                  <strong>Singularity Avoidance w(q):</strong> Continuous penalty enforces arm poses far from kinematic gimbal deadlocks.
+                  <strong>Manipulability guidance:</strong> The action shield filters candidate moves below the configured threshold.
                 </span>
               </div>
               <div className="row" style={{ gap: 10 }}>
                 <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#10b981', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>
                 <span style={{ fontSize: 14, color: 'var(--ink)' }}>
-                  <strong>Jerk Minimization:</strong> Penalizes angular acceleration derivatives to eliminate high-frequency servo oscillations.
+                  <strong>Motion smoothness:</strong> The reward penalizes abrupt joint changes; held-out jerk is reported below.
                 </span>
               </div>
             </div>
@@ -435,20 +438,20 @@ export default function Home() {
           {/* Benchmark Bar Chart */}
           <div className="panel body analytics-card landing-benchmark" style={{ height: 360, padding: 20 }} aria-label="Comparative robotics benchmark chart">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-              <h3 style={{ fontSize: '0.98rem' }}>Cleanroom Sortation Benchmark (N=15 Workcells)</h3>
-              <span className="pill info" style={{ fontSize: 11 }}>Reference Evaluation</span>
+              <h3 style={{ fontSize: '0.98rem' }}>Matched held-out scenes · 60 total</h3>
+              <span className="pill info" style={{ fontSize: 11 }}>20 per task · seed 2027</span>
             </div>
             <div className="metric-switch" role="group" aria-label="Benchmark metric"><button aria-pressed={activeTab === 'success'} onClick={() => setActiveTab('success')}>Success rate</button><button aria-pressed={activeTab === 'collision'} onClick={() => setActiveTab('collision')}>Collision rate</button><button aria-pressed={activeTab === 'jerk'} onClick={() => setActiveTab('jerk')}>Motion jerk</button></div>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={BENCH} margin={{ left: -16, right: 10, top: 10, bottom: 0 }}>
                 <CartesianGrid stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--ink-2)' }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--ink-2)' }} unit="%" />
+                <YAxis domain={activeTab === 'jerk' ? [0, 6] : [0, 100]} tick={{ fontSize: 11, fill: 'var(--ink-2)' }} unit={activeTab === 'jerk' ? '' : '%'} />
                 <Tooltip />
                 <Bar dataKey={activeTab} name={activeTab === 'success' ? 'Success %' : activeTab === 'collision' ? 'Hazard Collision %' : 'Motion Jerk Index'} fill={activeTab === 'success' ? '#10b981' : activeTab === 'collision' ? '#ef4444' : '#3b82f6'} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-            <div className="analytics-foot"><span><i className="legend-dot" /> Shipped reference results</span><span>15 scenes · rerun in Training</span></div>
+            <div className="analytics-foot"><span><i className="legend-dot" /> Measured; see docs/training</span><span>Success/collision % · jerk mean per episode</span></div>
           </div>
         </div>
       </section>

@@ -96,6 +96,7 @@ export default function Console() {
             ) : (
               <Stage
                 observation={sim.obs}
+                mujocoState={sim.mujoco}
                 obstacles={sim.obstacles}
                 trail={s.trail}
                 onSelect={(i, o) => handlePlanWithSound(`Sort the ${COLOR_NAMES[o.color] || o.color} ${COMPONENT_LABELS[o.shape] || o.shape} into ${(sim.obs.goal_key || 'blue_bin').replace('_', ' ')}`)}

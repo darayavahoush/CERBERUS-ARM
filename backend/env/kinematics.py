@@ -210,6 +210,29 @@ class PlanarArmKinematics:
         proj_y = y1 + t * dy
         return math.hypot(px - proj_x, py - proj_y)
 
+    def circle_clearance(
+        self,
+        theta1: float,
+        theta2: float,
+        theta3: float,
+        obs_x: float,
+        obs_y: float,
+        obs_radius: float,
+        link_radius: float = 0.05,
+    ) -> float:
+        """Signed clearance from the closest arm link to a circular hazard."""
+        fk = self.forward_kinematics(theta1, theta2, theta3)
+        bx, by = fk["base"]
+        ex, ey = fk["elbow"]
+        wx, wy = fk["wrist"]
+        tx, ty = fk["ee"]
+        distances = (
+            self.dist_point_to_segment(obs_x, obs_y, bx, by, ex, ey),
+            self.dist_point_to_segment(obs_x, obs_y, ex, ey, wx, wy),
+            self.dist_point_to_segment(obs_x, obs_y, wx, wy, tx, ty),
+        )
+        return min(distances) - (obs_radius + link_radius)
+
     def check_collision_circle(
         self,
         theta1: float,
@@ -239,4 +262,26 @@ class PlanarArmKinematics:
         if self.dist_point_to_segment(obs_x, obs_y, wx, wy, tx, ty) < (obs_radius + link_radius):
             return True
 
+        return False
+
+    def check_swept_collision_circle(
+        self,
+        start_angles: Tuple[float, float, float],
+        end_angles: Tuple[float, float, float],
+        obs_x: float,
+        obs_y: float,
+        obs_radius: float,
+        angular_resolution: float = math.radians(0.5),
+    ) -> bool:
+        """Check intermediate arm poses so a discrete step cannot tunnel through a hazard."""
+        max_delta = max(abs(end - start) for start, end in zip(start_angles, end_angles))
+        samples = max(1, int(math.ceil(max_delta / angular_resolution)))
+        for sample in range(1, samples + 1):
+            fraction = sample / samples
+            angles = tuple(
+                start + (end - start) * fraction
+                for start, end in zip(start_angles, end_angles)
+            )
+            if self.check_collision_circle(*angles, obs_x, obs_y, obs_radius):
+                return True
         return False

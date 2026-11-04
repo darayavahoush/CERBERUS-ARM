@@ -68,7 +68,11 @@ class D3QNAgent:
         self.training_losses: List[float] = []
 
     def select_action(
-        self, state_vector: np.ndarray, evaluate: bool = False
+        self,
+        state_vector: np.ndarray,
+        evaluate: bool = False,
+        action_mask: Optional[List[bool]] = None,
+        action_bias: Optional[List[float]] = None,
     ) -> Tuple[int, List[float]]:
         """Select action via epsilon-greedy policy and return Q-value distribution.
 
@@ -80,26 +84,43 @@ class D3QNAgent:
         ).unsqueeze(0)
 
         with torch.no_grad():
-            q_values = self.q_net(state_tensor).squeeze(0).cpu().numpy().tolist()
+            raw_q_values = self.q_net(state_tensor).squeeze(0).cpu().numpy()
+
+        scores = raw_q_values.astype(np.float32, copy=True)
+        if action_bias is not None:
+            bias = np.asarray(action_bias, dtype=np.float32)
+            if bias.shape != scores.shape or not np.all(np.isfinite(bias)):
+                raise ValueError("action_bias must contain one finite value per action")
+            scores += bias
+
+        valid = np.ones(self.action_dim, dtype=bool)
+        if action_mask is not None:
+            valid = np.asarray(action_mask, dtype=bool)
+            if valid.shape != (self.action_dim,):
+                raise ValueError("action_mask must contain one boolean per action")
+            if not valid.any():
+                valid[min(8, self.action_dim - 1)] = True  # fail-safe hold action
+        scores[~valid] = -1e9
 
         if not evaluate and random.random() < self.epsilon:
-            action = random.randrange(self.action_dim)
+            action = random.choice(np.flatnonzero(valid).tolist())
         else:
-            action = int(np.argmax(q_values))
+            action = int(np.argmax(scores))
 
-        return action, q_values
+        return action, raw_q_values.astype(float).tolist()
 
     def update(self) -> Optional[float]:
         """Perform one Double-DQN gradient descent step from the replay buffer."""
         if len(self.replay_buffer) < self.batch_size:
             return None
 
-        states, actions, rewards, next_states, dones = self.replay_buffer.sample(
-            self.batch_size, self.device
+        states, actions, rewards, next_states, dones, expert = self.replay_buffer.sample(
+            self.batch_size, self.device, include_expert=True
         )
 
         # Current Q-values: Q(s, a)
-        q_eval = self.q_net(states).gather(1, actions)
+        all_q_values = self.q_net(states)
+        q_eval = all_q_values.gather(1, actions)
 
         # Double DQN Target:
         # y = r + gamma * Q_target(s', argmax_a' Q_online(s', a'))
@@ -109,6 +130,13 @@ class D3QNAgent:
             q_target = rewards + (1.0 - dones) * self.gamma * next_q_targets
 
         loss = self.loss_fn(q_eval, q_target)
+        if expert.any():
+            # DQfD large-margin supervision keeps demonstrated actions ahead
+            # of alternatives while the TD target still trains task reward.
+            margin = torch.full_like(all_q_values, 0.8)
+            margin.scatter_(1, actions, 0.0)
+            margin_loss = torch.relu(all_q_values + margin - q_eval).max(dim=1).values
+            loss = loss + 0.75 * margin_loss[expert].mean()
 
         self.optimizer.zero_grad()
         loss.backward()

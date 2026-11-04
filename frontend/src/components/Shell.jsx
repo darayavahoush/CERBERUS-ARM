@@ -1,8 +1,16 @@
 import React from 'react';
-import { Activity, BookOpenText, FlaskConical, History, Info, LayoutDashboard, Home, Server, Beaker } from 'lucide-react';
+import { Activity, BookOpenText, FlaskConical, History, Info, LayoutDashboard, Home, Server, Beaker, Moon, Sun } from 'lucide-react';
 import { Link } from '../router';
 import { useBackend } from '../api/BackendProvider';
 import { Spinner } from './ui';
+import { useTheme } from './ThemeProvider';
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const next = theme === 'light' ? 'dark' : 'light';
+  const Icon = theme === 'light' ? Moon : Sun;
+  return <button className="theme-toggle" type="button" onClick={toggleTheme} aria-label={`Switch to ${next} mode`} title={`Switch to ${next} mode`}><Icon size={16} aria-hidden /><span>{theme === 'light' ? 'Dark' : 'Light'} mode</span></button>;
+}
 
 export const Logo = ({ size = 28 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
@@ -51,7 +59,7 @@ export function DashShell({ title, actions, children }) {
       <div className="main">
         <div className="top">
           <h1>{title}</h1>
-          <div className="end row wrap">{actions}<ConnectionPill /><SourceToggle /></div>
+          <div className="end row wrap">{actions}<ConnectionPill /><SourceToggle /><ThemeToggle /></div>
         </div>
         <main id="main" className="page">{children}</main>
       </div>
@@ -66,7 +74,8 @@ export function MarketingShell({ children }) {
         <div className="mtop">
           <Link to="/" className="brand"><Logo /> CERBERUS-ARM</Link>
           <nav aria-label="Main"><Link to="/">Home</Link><Link to="/about">About</Link><Link to="/console">Console</Link><Link to="/training">Training</Link><Link to="/episodes">Episodes</Link></nav>
-          <a className="btn primary small end" href="#/console">Open console</a>
+          <ThemeToggle />
+          <a className="btn primary small" href="#/console">Open console</a>
         </div>
       </header>
       <main id="main">{children}</main>

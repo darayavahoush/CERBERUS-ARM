@@ -7,7 +7,7 @@ const Ctx = createContext(null);
 export const useSim = () => useContext(Ctx);
 
 const blank = {
-  obs: null, obstacles: [], image: null, action: null, q: [], reward: 0, total: 0, rewards: [],
+  obs: null, mujoco: null, obstacles: [], image: null, action: null, q: [], reward: 0, total: 0, rewards: [],
   collision: false, success: false, finished: false, plan: null, instruction: '', explanation: '',
 };
 
@@ -34,7 +34,7 @@ export function SimProvider({ children }) {
   const logged = useRef(false);
 
   const apply = (data, extra = {}) => {
-    setSim((s) => ({ ...s, obs: data.observation, obstacles: data.obstacles ?? s.obstacles, image: data.rendered_image ?? null, ...extra }));
+    setSim((s) => ({ ...s, obs: data.observation, mujoco: data.mujoco ?? s.mujoco, obstacles: data.obstacles ?? s.obstacles, image: data.rendered_image ?? null, ...extra }));
     setTrail(data.observation?.fk?.ee ? [data.observation.fk.ee] : []);
   };
 
@@ -43,7 +43,7 @@ export function SimProvider({ children }) {
     try {
       const data = await api.reset(body);
       setPerception(null);
-      setSim({ ...blank, plan: extra.plan ?? null, instruction: extra.instruction ?? '', obs: data.observation, obstacles: data.obstacles ?? [], image: data.rendered_image ?? null });
+      setSim({ ...blank, plan: extra.plan ?? null, instruction: extra.instruction ?? '', obs: data.observation, mujoco: data.mujoco ?? null, obstacles: data.obstacles ?? [], image: data.rendered_image ?? null });
       setTrail([data.observation.fk.ee]);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }, [api]);
@@ -76,7 +76,7 @@ export function SimProvider({ children }) {
       const collision = !!d.info?.is_collision;
       const finished = !!(d.terminated || d.truncated);
       const next = {
-        ...ref.current, obs: d.observation, image: d.rendered_image ?? null, action: d.action, q: d.q_values || [],
+        ...ref.current, obs: d.observation, mujoco: d.mujoco ?? ref.current.mujoco, image: d.rendered_image ?? null, action: d.action, q: d.q_values || [],
         reward: d.reward, total: ref.current.total + d.reward, rewards: [...ref.current.rewards, d.reward],
         success, collision, finished, jerk: d.info?.jerk ?? ref.current.jerk,
       };
@@ -98,7 +98,7 @@ export function SimProvider({ children }) {
     try {
       const d = await api.plan(instruction);
       setPerception(null);
-      setSim({ ...blank, plan: d.plan, instruction, obs: d.observation, obstacles: d.obstacles ?? ref.current.obstacles, image: d.rendered_image ?? null });
+      setSim({ ...blank, plan: d.plan, instruction, obs: d.observation, mujoco: d.mujoco ?? null, obstacles: d.obstacles ?? ref.current.obstacles, image: d.rendered_image ?? null });
       setTrail([d.observation.fk.ee]);
       return d.plan;
     } catch (e) { setError(e.message); return null; } finally { setBusy(false); }

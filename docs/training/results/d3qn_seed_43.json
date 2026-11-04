@@ -1,0 +1,28 @@
+{
+  "started_at_utc": "2026-11-04T09:06:53.498177+00:00",
+  "seed": 43,
+  "episodes": 900,
+  "expert_mix_start": 0.85,
+  "demonstration_action_fraction": 0.5044,
+  "device": "cuda",
+  "python": "3.13.14",
+  "pytorch": "2.9.0+cu128",
+  "learner": "DQfD (Double DQN + expert large-margin loss) with HER",
+  "environment": {
+    "delta_theta_degrees": 7.5,
+    "max_steps": 120,
+    "tasks": [
+      1,
+      2,
+      3
+    ],
+    "swept_collision_resolution_degrees": 0.5
+  },
+  "checkpoint": "backend/data/checkpoints/d3qn_weights.pth",
+  "metrics_csv": "docs/training/results/d3qn_seed_43.csv",
+  "final_15_mean_reward": 53.4781,
+  "final_15_success_rate": 26.67,
+  "final_15_collision_rate": 0.0,
+  "gradient_updates": 72254,
+  "final_epsilon": 0.05
+}

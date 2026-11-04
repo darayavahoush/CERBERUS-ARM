@@ -1,0 +1,28 @@
+{
+  "seed": 42,
+  "samples": 5000,
+  "train_samples": 4000,
+  "validation_samples": 1000,
+  "epochs": 30,
+  "device": "cuda",
+  "shape_classes": [
+    "cube",
+    "sphere",
+    "triangle",
+    "star"
+  ],
+  "color_classes": [
+    "crimson",
+    "cobalt",
+    "emerald",
+    "amber"
+  ],
+  "best_validation_loss": 0.11591649055480957,
+  "best_epoch": 28,
+  "validation_shape_accuracy_pct": 96.7,
+  "validation_color_accuracy_pct": 99.6,
+  "validation_coordinate_l1": 0.0397483,
+  "checkpoint": "backend/data/checkpoints/cnn_weights.pth",
+  "metrics_csv": "docs/training/results/cnn_seed_42.csv",
+  "pytorch": "2.9.0+cu128"
+}

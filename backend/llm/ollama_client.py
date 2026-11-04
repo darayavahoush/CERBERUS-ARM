@@ -1,12 +1,14 @@
 """Asynchronous Local Ollama Client with Resilient Neuro-Symbolic Fallback."""
 
 import json
+import math
 from typing import Dict, Any, List, Optional
 import httpx
 
 from backend.llm.prompt_templates import (
     ROBOTIC_COMPILER_SYSTEM_PROMPT,
     EXPLAINABLE_AI_SYSTEM_PROMPT,
+    TASK_PLAN_SCHEMA,
 )
 from backend.llm.neuro_symbolic import NeuroSymbolicReasoningEngine
 
@@ -23,6 +25,49 @@ class OllamaRoboticClient:
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
         self.timeout = timeout_seconds
+
+    @staticmethod
+    def validate_task_plan(plan: Dict[str, Any], instruction: str, source: str = "ollama") -> Dict[str, Any]:
+        """Validate the model's symbolic goals and derive bounded DRL constraints."""
+        fallback = NeuroSymbolicReasoningEngine.parse_instruction(instruction)
+        shapes = {"cube", "sphere", "triangle", "star"}
+        colors = {"crimson", "cobalt", "emerald", "amber"}
+        bins = {"red_bin", "blue_bin", "green_bin"}
+        if plan.get("target_shape") not in shapes or plan.get("target_color") not in colors or plan.get("destination_bin") not in bins:
+            plan = dict(fallback)
+
+        incoming_weights = plan.get("supervisory_weights", {})
+        default_weights = fallback["supervisory_weights"]
+        limits = {"collision_penalty": (10.0, 50.0), "jerk_penalty": (0.25, 5.0), "step_penalty": (0.02, 0.5)}
+        weights = {}
+        for key, (minimum, maximum) in limits.items():
+            value = incoming_weights.get(key, default_weights[key])
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                value = default_weights[key]
+            weights[key] = float(max(minimum, min(maximum, value)))
+
+        style = plan.get("movement_style", fallback.get("movement_style", "balanced"))
+        if style not in {"careful", "balanced", "fast"}:
+            style = "balanced"
+        constraints_by_style = {
+            "careful": {"minimum_clearance_m": 0.075, "minimum_manipulability": 0.10, "max_steps": 120, "micro_alignment_bias": 0.035},
+            "balanced": {"minimum_clearance_m": 0.045, "minimum_manipulability": 0.05, "max_steps": 120, "micro_alignment_bias": 0.015},
+            "fast": {"minimum_clearance_m": 0.025, "minimum_manipulability": 0.03, "max_steps": 120, "micro_alignment_bias": 0.0},
+        }
+        result = dict(plan)
+        result.update({
+            "source": source,
+            "target_shape": plan["target_shape"],
+            "target_color": plan["target_color"],
+            "destination_bin": plan["destination_bin"],
+            "subgoals": ["APPROACH_TARGET", "ALIGN_GRIPPER", "EXECUTE_GRASP", "TRANSIT_SAFE", "DESCEND_RELEASE"],
+            "supervisory_weights": weights,
+            "movement_style": style,
+            "execution_constraints": constraints_by_style[style],
+            "reasoning_steps": [str(item)[:240] for item in plan.get("reasoning_steps", [])[:5] if isinstance(item, str)],
+            "safety_assessment": str(plan.get("safety_assessment", "Runtime action shielding enabled."))[:400],
+        })
+        return result
 
     async def check_status(self) -> Dict[str, Any]:
         """Check if local Ollama daemon is reachable and list downloaded models."""
@@ -67,23 +112,19 @@ class OllamaRoboticClient:
                     "prompt": prompt,
                     "system": ROBOTIC_COMPILER_SYSTEM_PROMPT,
                     "stream": False,
-                    "format": "json",
+                    "format": TASK_PLAN_SCHEMA,
                 }
                 res = await client.post(f"{self.base_url}/api/generate", json=payload)
                 if res.status_code == 200:
                     raw_response = res.json().get("response", "{}")
                     parsed = json.loads(raw_response)
-                    # Verify required keys
-                    if "target_shape" in parsed and "destination_bin" in parsed:
-                        parsed["source"] = f"ollama_{model}"
-                        return parsed
+                    return self.validate_task_plan(parsed, instruction, source=f"ollama_{model}")
         except Exception:
             # Automatic graceful failover to deterministic neuro-symbolic engine
             pass
 
         fallback = NeuroSymbolicReasoningEngine.parse_instruction(instruction)
-        fallback["source"] = "neuro_symbolic_grounded_engine"
-        return fallback
+        return self.validate_task_plan(fallback, instruction, source="neuro_symbolic_grounded_engine")
 
     async def explain_telemetry(
         self, telemetry: Dict[str, Any], model_name: Optional[str] = None

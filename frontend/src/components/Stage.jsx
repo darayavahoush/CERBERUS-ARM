@@ -19,7 +19,7 @@ function Shape({ shape, r }) {
 // World coords are y-up; the SVG is y-down, so every y goes through Y().
 const Y = (y) => -y;
 
-export default function Stage({ observation: obs, obstacles = [], trail = [], onSelect, bare = false, showHud = true, label }) {
+export default function Stage({ observation: obs, mujocoState = null, obstacles = [], trail = [], onSelect, bare = false, showHud = true, label }) {
   const [viewMode, setViewMode] = useState('3d'); // '3d' | '2d'
   const pillars = obstacles.length ? obstacles : [DEFAULT_PILLAR];
   const targetIdx = obs?.target_idx ?? 0;
@@ -63,6 +63,7 @@ export default function Stage({ observation: obs, obstacles = [], trail = [], on
         <div className="w-full">
           <MuJoCoStage3D
             observation={obs}
+            mujocoState={mujocoState}
             obstacles={obstacles}
             trail={trail}
             onSelect={onSelect}

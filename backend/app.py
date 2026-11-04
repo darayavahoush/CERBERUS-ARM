@@ -14,7 +14,7 @@ import time
 from typing import Dict, Any, Optional, List
 import numpy as np
 import torch
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -44,6 +44,7 @@ app.add_middleware(
 env = RoboticArmEnv()
 renderer = WorkspaceRenderer(width=256, height=256)
 mujoco_env = CerberusMuJoCoEnv()
+mujoco_env.set_joints(env.theta1, env.theta2, env.theta3, env.gripper_closed, env.objects)
 
 # Hardware device
 device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
@@ -122,7 +123,7 @@ class OrchestratorRunRequest(BaseModel):
     instruction: str
     task_id: int = 1
     model_name: Optional[str] = "qwen2.5:3b-instruct"
-    max_steps: int = 40
+    max_steps: int = 120
 
 
 class EpisodeRecord(BaseModel):
@@ -155,7 +156,7 @@ def image_to_base64(img) -> str:
 @app.get("/api/mujoco/state")
 async def get_mujoco_state():
     """Retrieve real-time MuJoCo 3D physics state."""
-    mujoco_env.set_joints(env.theta1, env.theta2, env.theta3, env.gripper_closed)
+    mujoco_env.set_joints(env.theta1, env.theta2, env.theta3, env.gripper_closed, env.objects)
     return mujoco_env.get_3d_state()
 
 
@@ -167,7 +168,7 @@ async def get_system_status():
     return {
         "status": "online",
         "device": device,
-        "physics_engine": "MuJoCo 3.17 + RK4 Integrator" if mujoco_info.get("available") else "Analytical",
+        "physics_engine": "MuJoCo model · synchronized joint-state digital twin (actions remain discrete kinematic steps)" if mujoco_info.get("available") else "Analytical kinematics fallback",
         "mujoco": mujoco_info,
         "cnn": {
             "architecture": "CoordConv + Multi-Task Backbone",
@@ -175,7 +176,7 @@ async def get_system_status():
             "classes": {"shapes": SHAPES, "colors": list(COLORS.keys())},
         },
         "drl": {
-            "algorithm": "Dueling Double-DQN (D3QN) + HER",
+            "algorithm": "DQfD (Dueling Double-DQN + HER + expert margin loss)",
             "state_dim": agent.state_dim,
             "action_dim": agent.action_dim,
             "epsilon": round(agent.epsilon, 4),
@@ -189,9 +190,12 @@ async def get_system_status():
             "nodes": [
                 "perceive_workspace",
                 "plan_task_qwen",
+                "validate_task_plan",
+                "ground_target_and_goal",
                 "validate_safety",
                 "replan_with_caution",
                 "execute_d3qn_policy",
+                "learn_from_episode",
                 "explain_forensics_xai",
             ],
         },
@@ -218,6 +222,10 @@ async def run_langgraph_orchestration(req: OrchestratorRunRequest):
         "cumulative_reward": result.get("cumulative_reward"),
         "jerk_index": result.get("jerk_index"),
         "plan": result.get("plan"),
+        "target_grounding": result.get("target_grounding"),
+        "policy_guidance": result.get("policy_guidance"),
+        "policy_learning": result.get("policy_learning"),
+        "safety_interventions": result.get("safety_interventions", 0),
         "perception": result.get("perception"),
         "safety_assessment": result.get("safety_assessment"),
         "xai_debrief": result.get("xai_debrief"),
@@ -248,10 +256,12 @@ async def plan_task_with_llm(req: TaskPlanRequest):
     img = renderer.render_scene(
         obs["fk"], obs["objects"], env.obstacles, RECEPTACLES, obs["gripper_closed"]
     )
+    mujoco_env.set_joints(obs["theta1"], obs["theta2"], obs["theta3"], obs["gripper_closed"], obs["objects"])
 
     return {
         "plan": plan,
         "observation": obs,
+        "mujoco": mujoco_env.get_3d_state(),
         "rendered_image": image_to_base64(img),
     }
 
@@ -268,8 +278,10 @@ async def reset_environment(req: ResetRequest):
     img = renderer.render_scene(
         obs["fk"], obs["objects"], env.obstacles, RECEPTACLES, obs["gripper_closed"]
     )
+    mujoco_env.set_joints(obs["theta1"], obs["theta2"], obs["theta3"], obs["gripper_closed"], obs["objects"])
     return {
         "observation": obs,
+        "mujoco": mujoco_env.get_3d_state(),
         "rendered_image": image_to_base64(img),
         "target_object": env.objects[env.target_object_idx],
         "receptacles": RECEPTACLES,
@@ -305,7 +317,7 @@ async def step_environment(req: StepRequest):
     )
 
     # Sync MuJoCo physics state
-    mujoco_env.set_joints(obs_after["theta1"], obs_after["theta2"], obs_after["theta3"], obs_after["gripper_closed"])
+    mujoco_env.set_joints(obs_after["theta1"], obs_after["theta2"], obs_after["theta3"], obs_after["gripper_closed"], obs_after["objects"])
     mujoco_state = mujoco_env.get_3d_state()
 
     return {
@@ -465,11 +477,14 @@ async def clear_episodes():
 
 
 @app.get("/api/benchmark")
-async def run_benchmark():
-    """Execute full research-grade policy comparative benchmark."""
-    results = comparator.run_full_benchmark_suite()
+async def run_benchmark(episodes_per_task: int = Query(default=20, ge=1, le=100), seed: int = Query(default=2027, ge=0)):
+    """Compare all policies on a shared, task-balanced scene set."""
+    results = comparator.run_full_benchmark_suite(episodes_per_task=episodes_per_task, seed=seed)
     return {
-        "timestamp": "2026-11-04T10:30:00",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "seed": seed,
+        "episodes_per_task": episodes_per_task,
+        "matched_scenarios": episodes_per_task * 3,
         "benchmark_results": results,
     }
 

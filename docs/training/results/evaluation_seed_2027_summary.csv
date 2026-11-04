@@ -1,0 +1,10 @@
+policy,task_id,episodes,success_rate_pct,collision_rate_pct,mean_return,mean_steps,mean_jerk
+random,1,20,0.0,85.0,-41.0425,48.4,2.94628
+random,2,20,0.0,80.0,-40.7368,60.0,3.707605
+random,3,20,0.0,80.0,-45.6778,56.6,3.330525
+geometric_reference,1,20,80.0,0.0,99.4876,48.85,2.339565
+geometric_reference,2,20,75.0,0.0,124.9809,74.3,4.126455
+geometric_reference,3,20,80.0,0.0,105.2844,60.25,3.329415
+trained_d3qn,1,20,10.0,0.0,22.4809,110.35,3.044995
+trained_d3qn,2,20,50.0,0.0,93.4671,88.4,3.32593
+trained_d3qn,3,20,25.0,0.0,89.4339,105.1,2.97708

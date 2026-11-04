@@ -1,0 +1,17 @@
+{
+  "started_at_utc": "2026-11-04T08:41:45.547042+00:00",
+  "seed": 42,
+  "episodes": 600,
+  "expert_mix_start": 0.7,
+  "demonstration_action_fraction": 0.4707,
+  "device": "cuda",
+  "python": "3.13.14",
+  "pytorch": "2.9.0+cu128",
+  "checkpoint": "backend/data/checkpoints/d3qn_weights.pth",
+  "metrics_csv": "docs/training/results/d3qn_seed_42.csv",
+  "final_15_mean_reward": 75.94732,
+  "final_15_success_rate": 26.67,
+  "final_15_collision_rate": 6.67,
+  "gradient_updates": 42852,
+  "final_epsilon": 0.05
+}

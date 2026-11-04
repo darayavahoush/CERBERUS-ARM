@@ -29,9 +29,10 @@ class HindsightReplayBuffer:
         reward: float,
         next_state: np.ndarray,
         done: bool,
+        expert: bool = False,
     ):
         """Store standard experience tuple."""
-        self.buffer.append((state, action, reward, next_state, done))
+        self.buffer.append((state, action, reward, next_state, done, expert))
 
     def store_episode_with_her(
         self,
@@ -50,6 +51,14 @@ class HindsightReplayBuffer:
         if T == 0:
             return
 
+        # HER goals must represent object locations reached during manipulation.
+        # Before the object is picked up its unchanged spawn position is not a
+        # useful hindsight goal, since that goal is already satisfied at reset.
+        future_goal_indices = [
+            i for i, item in enumerate(episode_transitions)
+            if item.get("her_valid", False)
+        ]
+
         for t in range(T):
             trans = episode_transitions[t]
             # Store original transition
@@ -59,28 +68,36 @@ class HindsightReplayBuffer:
                 trans["reward"],
                 trans["next_state"],
                 trans["done"],
+                trans.get("expert", False),
             )
 
-            # Sample k future achieved goals from same episode
-            for _ in range(self.k_future):
-                if t >= T - 1:
-                    break
-                future_idx = random.randint(t + 1, T - 1)
+            # Sample only future locations reached while carrying/after moving
+            # the object. A collision transition cannot be relabeled as success.
+            candidates = [i for i in future_goal_indices if i > t]
+            if trans.get("is_collision", False):
+                continue
+            for _ in range(min(self.k_future, len(candidates))):
+                future_idx = random.choice(candidates)
                 future_goal = episode_transitions[future_idx]["achieved_goal"]
 
-                # Relabel state with future goal coordinates (indices 10, 11)
+                # State layout: object xy at 11:13, goal xy at 13:15,
+                # object-to-goal distance at 16.
                 relabeled_state = trans["state"].copy()
                 relabeled_next_state = trans["next_state"].copy()
-                relabeled_state[10] = future_goal[0]
-                relabeled_state[11] = future_goal[1]
-                relabeled_next_state[10] = future_goal[0]
-                relabeled_next_state[11] = future_goal[1]
+                goal_scale = float(trans.get("goal_scale", 1.95))
+                for state in (relabeled_state, relabeled_next_state):
+                    state[13] = future_goal[0] / goal_scale
+                    state[14] = future_goal[1] / goal_scale
+                    state[16] = float(np.hypot(
+                        state[11] * goal_scale - future_goal[0],
+                        state[12] * goal_scale - future_goal[1],
+                    ))
 
                 # Compute new reward under the retroactively achieved goal
                 relabeled_reward = reward_fn(
                     trans["achieved_goal"], future_goal
                 )
-                relabeled_done = (future_idx == t + 1)
+                relabeled_done = relabeled_reward > 0.0
 
                 self.push(
                     relabeled_state,
@@ -88,19 +105,23 @@ class HindsightReplayBuffer:
                     relabeled_reward,
                     relabeled_next_state,
                     relabeled_done,
+                    False,
                 )
 
     def sample(
-        self, batch_size: int, device: torch.device
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, batch_size: int, device: torch.device, include_expert: bool = False
+    ) -> Tuple[torch.Tensor, ...]:
         """Sample a batch of transitions as PyTorch Tensors."""
         batch = random.sample(self.buffer, batch_size)
-        states, actions, rewards, next_states, dones = zip(*batch)
+        states, actions, rewards, next_states, dones, expert = zip(*batch)
 
-        return (
+        tensors = (
             torch.as_tensor(np.array(states), dtype=torch.float32, device=device),
             torch.as_tensor(np.array(actions), dtype=torch.long, device=device).unsqueeze(1),
             torch.as_tensor(np.array(rewards), dtype=torch.float32, device=device).unsqueeze(1),
             torch.as_tensor(np.array(next_states), dtype=torch.float32, device=device),
             torch.as_tensor(np.array(dones), dtype=torch.float32, device=device).unsqueeze(1),
         )
+        if include_expert:
+            return tensors + (torch.as_tensor(np.array(expert), dtype=torch.bool, device=device),)
+        return tensors

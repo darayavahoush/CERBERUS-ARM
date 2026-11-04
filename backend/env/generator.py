@@ -97,7 +97,9 @@ class WorkspaceRenderer:
         # Draw Objects
         for obj in objects:
             ox, oy = self.world_to_pixel(obj["x"], obj["y"])
-            rad_px = max(6, int(obj["radius"] / (self.x_max - self.x_min) * self.width))
+            # Preserve a visible contour at training resolution while keeping
+            # object size proportional to the workspace's metric scale.
+            rad_px = max(8, int(obj["radius"] / (self.x_max - self.x_min) * self.width * 1.5))
             col = COLOR_RGB.get(obj["color"], (255, 255, 255))
             shape = obj.get("shape", "cube")
 
@@ -123,16 +125,11 @@ class WorkspaceRenderer:
                 ]
                 draw.polygon(pts, fill=col, outline=(255, 255, 255))
             elif shape == "star":
-                pts = [
-                    (ox, oy - rad_px - 2),
-                    (ox + rad_px // 2, oy - rad_px // 2),
-                    (ox + rad_px + 2, oy),
-                    (ox + rad_px // 2, oy + rad_px // 2),
-                    (ox, oy + rad_px + 2),
-                    (ox - rad_px // 2, oy + rad_px // 2),
-                    (ox - rad_px - 2, oy),
-                    (ox - rad_px // 2, oy - rad_px // 2),
-                ]
+                pts = []
+                for point in range(10):
+                    radius = rad_px + 1 if point % 2 == 0 else max(3, rad_px // 2)
+                    angle = -math.pi / 2 + point * math.pi / 5
+                    pts.append((ox + int(math.cos(angle) * radius), oy + int(math.sin(angle) * radius)))
                 draw.polygon(pts, fill=col, outline=(255, 255, 255))
 
         # Draw Robotic Arm Links & Joints (3-DOF Articulated Manipulator)

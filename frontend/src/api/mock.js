@@ -267,10 +267,13 @@ export function createMockBackend(seed = 7) {
       await wait(1200);
       return {
         timestamp: new Date().toISOString(),
+        seed: 2027,
+        episodes_per_task: 20,
+        matched_scenarios: 60,
         benchmark_results: [
-          { policy_name: 'Random exploration', episodes: 15, success_rate: 6.7, collision_rate: 46.7, mean_reward: -34.8, mean_steps: 80, mean_jerk: 14.2 },
-          { policy_name: 'Standard D3QN', episodes: 15, success_rate: 53.3, collision_rate: 20, mean_reward: 18.4, mean_steps: 44.5, mean_jerk: 6.8 },
-          { policy_name: 'D3QN + HER + LLM weights', episodes: 15, success_rate: 86.7, collision_rate: 6.7, mean_reward: 48.9, mean_steps: 28.2, mean_jerk: 3.1 },
+          { policy_name: 'Random', episodes: 60, success_rate: 0, collision_rate: 81.7, mean_reward: -42.49, mean_steps: 55.0, mean_jerk: 3.328 },
+          { policy_name: 'Geometric reference', episodes: 60, success_rate: 78.3, collision_rate: 0, mean_reward: 109.92, mean_steps: 61.1, mean_jerk: 3.265 },
+          { policy_name: 'Trained DQfD + safety shield', episodes: 60, success_rate: 28.3, collision_rate: 0, mean_reward: 68.46, mean_steps: 101.3, mean_jerk: 3.116 },
         ],
       };
     },
