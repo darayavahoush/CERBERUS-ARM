@@ -10,6 +10,7 @@ Provides:
 import io
 import base64
 import math
+import time
 from typing import Dict, Any, Optional, List
 import numpy as np
 import torch
@@ -122,6 +123,26 @@ class OrchestratorRunRequest(BaseModel):
     task_id: int = 1
     model_name: Optional[str] = "qwen2.5:3b-instruct"
     max_steps: int = 40
+
+
+class EpisodeRecord(BaseModel):
+    id: str
+    ts: int
+    mode: str = "live"
+    instruction: str
+    target: str
+    bin: str
+    success: bool
+    collision: bool
+    steps: int
+    reward: float
+    jerk: float = 0.0
+    source: str = "policy"
+
+
+# In-memory history stores
+EPISODES_LOG: List[Dict[str, Any]] = []
+TRAIN_RUNS_LOG: List[Dict[str, Any]] = []
 
 
 # Helper to encode PIL image as Base64 string
@@ -387,7 +408,7 @@ async def train_step(episodes: int = 5):
         if info.get("is_success", False):
             success_count += 1
 
-    return {
+    summary = {
         "episodes_trained": episodes,
         "mean_reward": round(float(np.mean(rewards_history)), 2) if rewards_history else 0.0,
         "success_rate": round((success_count / episodes) * 100, 1),
@@ -396,6 +417,51 @@ async def train_step(episodes: int = 5):
         "total_steps": agent.total_steps,
         "buffer_size": len(agent.replay_buffer),
     }
+
+    # Record batch to server training history
+    batch_record = {
+        "ts": int(time.time() * 1000),
+        "mode": "live",
+        "batch": len(TRAIN_RUNS_LOG) + 1,
+        "episodes": episodes,
+        "success": summary["success_rate"],
+        "reward": summary["mean_reward"],
+        "loss": summary["mean_loss"],
+        "epsilon": summary["current_epsilon"],
+        "steps": summary["total_steps"],
+    }
+    TRAIN_RUNS_LOG.append(batch_record)
+
+    return summary
+
+
+@app.get("/api/train/history")
+async def get_train_history():
+    """Retrieve persisted training run history."""
+    return TRAIN_RUNS_LOG
+
+
+@app.get("/api/episodes")
+async def get_episodes():
+    """Retrieve recorded episodes history."""
+    return EPISODES_LOG
+
+
+@app.post("/api/episodes")
+async def record_episode(ep: EpisodeRecord):
+    """Record an episode outcome from frontend or automated execution."""
+    rec = ep.model_dump()
+    EPISODES_LOG.append(rec)
+    if len(EPISODES_LOG) > 300:
+        EPISODES_LOG.pop(0)
+    return {"status": "recorded", "id": ep.id}
+
+
+@app.delete("/api/episodes")
+async def clear_episodes():
+    """Clear recorded episodes."""
+    EPISODES_LOG.clear()
+    return {"status": "cleared"}
 
 
 @app.get("/api/benchmark")

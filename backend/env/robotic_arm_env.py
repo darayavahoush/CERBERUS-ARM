@@ -84,6 +84,7 @@ class RoboticArmEnv:
 
         self.current_step = 0
         self.trajectory_history: List[Dict[str, Any]] = []
+        self.reset()
 
     @property
     def action_space_size(self) -> int:
@@ -192,6 +193,8 @@ class RoboticArmEnv:
 
     def get_observation(self) -> Dict[str, Any]:
         """Return full structured state observation."""
+        if not self.objects:
+            self.reset()
         fk = self.kinematics.forward_kinematics(self.theta1, self.theta2)
         ee_x, ee_y = fk["ee"]
         w = self.kinematics.manipulability(self.theta2)
@@ -393,11 +396,11 @@ class RoboticArmEnv:
         self.trajectory_history.append(telemetry)
 
         info = {
-            "is_success": success,
-            "is_collision": collision,
-            "jerk": jerk,
-            "manipulability": w,
-            "dist_to_goal": curr_dist_obj_goal,
+            "is_success": bool(success),
+            "is_collision": bool(collision),
+            "jerk": round(float(jerk), 4),
+            "manipulability": round(float(w), 4),
+            "dist_to_goal": round(float(curr_dist_obj_goal), 4),
         }
 
         return self.get_observation(), reward, terminated, truncated, info

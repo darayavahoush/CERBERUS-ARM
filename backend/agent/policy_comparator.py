@@ -5,7 +5,7 @@ Compares:
 2. Vanilla DQN Baseline (standard replay, unguided)
 3. Neuro-Arm Masterpiece: Dueling Double-DQN + HER + LLM Supervisory Modulation
 
-Generates quantitative evaluation metrics for examination compliance.
+Generates quantitative evaluation metrics for policy validation and empirical benchmarking.
 """
 
 from typing import Dict, Any, List
