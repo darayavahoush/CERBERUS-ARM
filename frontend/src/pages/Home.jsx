@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -31,8 +30,24 @@ import {
 } from 'lucide-react';
 import { MarketingShell } from '../components/Shell';
 import HeroDemo from '../components/HeroDemo';
-import AIBrainPipeline from '../components/AIBrainPipeline';
 import { Img } from '../components/ui';
+
+const AIBrainPipeline = lazy(() => import('../components/AIBrainPipeline'));
+
+function DeferredPipeline(props) {
+  const sectionRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || !('IntersectionObserver' in window)) { setVisible(true); return undefined; }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); observer.disconnect(); }
+    }, { rootMargin: '280px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={sectionRef} className="pipeline-lazy-slot">{visible ? <Suspense fallback={<div className="pipeline-loading" role="status">Loading interactive pipeline…</div>}><AIBrainPipeline {...props} /></Suspense> : <div className="pipeline-loading">Interactive pipeline loads as you scroll to it.</div>}</div>;
+}
 
 const HEADS = [
   {
@@ -132,11 +147,13 @@ export default function Home() {
 
   return (
     <MarketingShell>
+      <div className="marketing-page">
       {/* 1. CINEMATIC HERO SECTION */}
-      <section className="sect tight" style={{ paddingTop: 20, paddingBottom: 48 }}>
+      <section className="sect tight hero-wrap">
+        <div className="hero-grid-bg" aria-hidden="true" /><div className="hero-orb hero-orb-one" aria-hidden="true" /><div className="hero-orb hero-orb-two" aria-hidden="true" />
         <div className="hero" style={{ alignItems: 'start', gap: 36 }}>
           {/* Left Hero Column: Typographic Branding & Technical Specs */}
-          <div className="col" style={{ gap: 20 }}>
+          <div className="col hero-copy" style={{ gap: 20 }}>
             <div className="row wrap" style={{ gap: 8 }}>
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 shadow-sm">
                 <Box className="w-3.5 h-3.5 text-cyan-400" />
@@ -217,10 +234,11 @@ export default function Home() {
           </div>
 
           {/* Right Hero Column: Interactive Live 3-DOF 3D Twin Demo */}
-          <div className="col" style={{ width: '100%' }}>
-            <HeroDemo />
+          <div className="col hero-visual" style={{ width: '100%' }}>
+            <div className="hero-demo-frame"><div className="demo-topline"><span className="demo-mark"><Activity size={13} /> CERBERUS <i>LIVE SIMULATION</i></span><span className="demo-window"><i /><i /><i /></span></div><HeroDemo /></div>
           </div>
         </div>
+        <div className="hero-facts sect"><span>BUILT FOR CURIOUS MAKERS</span><div><b>3</b> cooperating intelligence heads</div><div><b>500</b> Hz MuJoCo physics</div><div><b>Local-first</b> reasoning</div></div>
       </section>
 
       {/* 2. THE THREE CERBERUS HEADS (TRI-MODAL DEEP INTELLIGENCE) */}
@@ -367,7 +385,7 @@ export default function Home() {
           </p>
         </div>
 
-        <AIBrainPipeline
+        <DeferredPipeline
           busy={false}
           perceptionConfidence={0.984}
           manipulability={0.762}
@@ -385,7 +403,7 @@ export default function Home() {
               7× Collision Reduction.
             </h2>
             <p className="muted" style={{ fontSize: '1.02rem', lineHeight: 1.65 }}>
-              Standard reinforcement learning struggles with sparse rewards in obstacle-rich workcells. CERBERUS achieves state-of-the-art sample efficiency and collision safety by combining Hindsight Experience Replay (HER) with continuous Yoshikawa manipulability regularization and supervisory penalty modulation.
+              On the project’s 15-scene reference evaluation, CERBERUS combines hindsight replay with motion-safety penalties to raise placement success and reduce collisions. Explore the shipped results below, then rerun the experiment from Training.
             </p>
 
             <div className="col" style={{ gap: 10 }}>
@@ -415,22 +433,22 @@ export default function Home() {
           </div>
 
           {/* Benchmark Bar Chart */}
-          <div className="panel body" style={{ height: 340, padding: 20 }} role="img" aria-label="Comparative Robotics Benchmark Chart">
+          <div className="panel body analytics-card landing-benchmark" style={{ height: 360, padding: 20 }} aria-label="Comparative robotics benchmark chart">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
               <h3 style={{ fontSize: '0.98rem' }}>Cleanroom Sortation Benchmark (N=15 Workcells)</h3>
               <span className="pill info" style={{ fontSize: 11 }}>Reference Evaluation</span>
             </div>
+            <div className="metric-switch" role="group" aria-label="Benchmark metric"><button aria-pressed={activeTab === 'success'} onClick={() => setActiveTab('success')}>Success rate</button><button aria-pressed={activeTab === 'collision'} onClick={() => setActiveTab('collision')}>Collision rate</button><button aria-pressed={activeTab === 'jerk'} onClick={() => setActiveTab('jerk')}>Motion jerk</button></div>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={BENCH} margin={{ left: -16, right: 10, top: 10, bottom: 0 }}>
                 <CartesianGrid stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--ink-2)' }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--ink-2)' }} unit="%" />
                 <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="success" name="Success %" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="collision" name="Hazard Collision %" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey={activeTab} name={activeTab === 'success' ? 'Success %' : activeTab === 'collision' ? 'Hazard Collision %' : 'Motion Jerk Index'} fill={activeTab === 'success' ? '#10b981' : activeTab === 'collision' ? '#ef4444' : '#3b82f6'} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            <div className="analytics-foot"><span><i className="legend-dot" /> Shipped reference results</span><span>15 scenes · rerun in Training</span></div>
           </div>
         </div>
       </section>
@@ -477,6 +495,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      </div>
     </MarketingShell>
   );
 }

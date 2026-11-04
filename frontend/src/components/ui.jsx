@@ -43,7 +43,7 @@ export function DisconnectedState({ mode, error, onRetry, onUseMock }) {
       <WifiOff size={18} aria-hidden style={{ flex: 'none', marginTop: 2 }} />
       <div className="grow">
         <strong>{mode === 'live' ? 'Backend is not reachable' : 'Data source unavailable'}</strong>
-        <div>{error || 'Start it with “uvicorn backend.app:app --port 8000”, or switch to sample data.'}</div>
+        <div>{error || 'Start it with “uvicorn backend.app:app --port 8001”, or switch to sample data.'}</div>
       </div>
       <div className="row wrap"><button className="btn small" onClick={onRetry}>Retry</button>{onUseMock && <button className="btn small primary" onClick={onUseMock}>Use sample data</button>}</div>
     </div>

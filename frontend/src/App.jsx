@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BackendProvider } from './api/BackendProvider';
 import { SimProvider } from './lib/SimProvider';
 import { useRoute } from './router';
-import Home from './pages/Home';
-import About from './pages/About';
-import Console from './pages/Console';
-import Training from './pages/Training';
-import Episodes from './pages/Episodes';
 import { DashShell } from './components/Shell';
 import { EmptyState } from './components/ui';
+
+const Home = lazy(() => import('./pages/Home'));
+const About = lazy(() => import('./pages/About'));
+const Console = lazy(() => import('./pages/Console'));
+const Training = lazy(() => import('./pages/Training'));
+const Episodes = lazy(() => import('./pages/Episodes'));
 
 const ROUTES = { '/': Home, '/about': About, '/console': Console, '/training': Training, '/episodes': Episodes };
 
@@ -19,7 +20,7 @@ export default function App() {
     <BackendProvider>
       <SimProvider>
         <a className="skip" href="#main">Skip to content</a>
-        {Page ? <Page /> : <DashShell title="Not found"><EmptyState title="That page doesn’t exist" body="Check the address, or head back to the console." action={<a className="btn primary" href="#/console">Open console</a>} /></DashShell>}
+        {Page ? <Suspense fallback={<div className="route-loading" role="status">Loading page…</div>}><Page /></Suspense> : <DashShell title="Not found"><EmptyState title="That page doesn’t exist" body="Check the address, or head back to the console." action={<a className="btn primary" href="#/console">Open console</a>} /></DashShell>}
       </SimProvider>
     </BackendProvider>
   );

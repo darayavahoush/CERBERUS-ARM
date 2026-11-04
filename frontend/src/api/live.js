@@ -21,7 +21,7 @@ async function req(path, { method = 'GET', body, timeout = 15000 } = {}) {
   } catch (e) {
     if (e instanceof ApiError) throw e;
     if (e.name === 'AbortError') throw new ApiError('The backend took too long to answer.');
-    throw new ApiError('Cannot reach the backend on port 8000.');
+    throw new ApiError('Cannot reach the backend. Check that the API server is running.');
   } finally {
     clearTimeout(timer);
   }
@@ -30,7 +30,7 @@ async function req(path, { method = 'GET', body, timeout = 15000 } = {}) {
 export const liveApi = {
   id: 'live',
   // Any failure here means the backend is not serving; the dev proxy answers 500 when it is down.
-  status: () => req('/api/status', { timeout: 6000 }).catch(() => { throw new ApiError('Cannot reach the backend on port 8000.'); }),
+  status: () => req('/api/status', { timeout: 6000 }).catch(() => { throw new ApiError('Cannot reach the backend. Check that the API server is running.'); }),
   reset: (body = {}) => req('/api/env/reset', { method: 'POST', body: { task_id: 1, ...body } }),
   step: (action = null) => req('/api/env/step', { method: 'POST', body: { action } }),
   plan: (instruction) => req('/api/task/plan', { method: 'POST', body: { instruction }, timeout: 60000 }),
