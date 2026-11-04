@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BrainCircuit,
-  Send,
   Sparkles,
-  ShieldCheck,
-  Cpu,
   CheckCircle2,
   Clock,
   Terminal,
   FileText,
+  Play,
+  Layers,
 } from 'lucide-react';
 
 const PRESET_TASKS = [
@@ -30,25 +29,46 @@ const PRESET_TASKS = [
 
 export default function OllamaConsole({
   onPlanTask,
+  onRunOrchestrator,
   activePlan,
   activeSubgoalIdx = 0,
   xaiExplanation = '',
   onRequestXAI,
   ollamaStatus = {},
   loading = false,
+  orchestratorLogs = [],
 }) {
   const [instruction, setInstruction] = useState('');
+  const [selectedModel, setSelectedModel] = useState('qwen2.5:3b-instruct');
+
+  useEffect(() => {
+    if (ollamaStatus?.active_model) {
+      setSelectedModel(ollamaStatus.active_model);
+    }
+  }, [ollamaStatus?.active_model]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!instruction.trim()) return;
-    onPlanTask(instruction);
+    onPlanTask(instruction, selectedModel);
   };
 
   const handleSelectPreset = (prompt) => {
     setInstruction(prompt);
-    onPlanTask(prompt);
+    onPlanTask(prompt, selectedModel);
   };
+
+  const handleExecuteOrchestrator = () => {
+    const prompt = instruction.trim() || PRESET_TASKS[0].prompt;
+    if (onRunOrchestrator) {
+      onRunOrchestrator(prompt, selectedModel);
+    }
+  };
+
+  const availableModels =
+    ollamaStatus?.models && ollamaStatus.models.length > 0
+      ? ollamaStatus.models
+      : ['qwen2.5:3b-instruct', 'llama3.2:latest', 'llama3.1:8b', 'llama3:latest'];
 
   return (
     <div className="rounded-xl glass-panel border border-cyan-500/20 p-4 flex flex-col gap-3 shadow-xl">
@@ -57,7 +77,7 @@ export default function OllamaConsole({
         <div className="flex items-center gap-2">
           <BrainCircuit className="w-4 h-4 text-cyan-400" />
           <h3 className="text-sm font-semibold tracking-wide text-slate-100 uppercase font-mono">
-            Local Ollama LLM Reasoning & Task Compiler
+            LangGraph + Ollama Qwen Orchestrator
           </h3>
         </div>
         <div className="flex items-center gap-2">
@@ -66,11 +86,18 @@ export default function OllamaConsole({
               ollamaStatus?.online ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'
             }`}
           />
-          <span className="text-[11px] font-mono text-slate-300">
-            {ollamaStatus?.backend === 'local_ollama'
-              ? `Ollama: ${ollamaStatus?.active_model || 'llama3.2'}`
-              : 'Grounded Neuro-Symbolic Engine'}
-          </span>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="text-[11px] font-mono text-cyan-300 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-400 cursor-pointer"
+            title="Active Ollama Model"
+          >
+            {availableModels.map((m) => (
+              <option key={m} value={m} className="bg-slate-900 text-slate-200">
+                {m}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -94,16 +121,29 @@ export default function OllamaConsole({
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           placeholder="e.g. Pick the crimson cube and place it into the blue receptacle cautiously..."
-          className="w-full px-3.5 py-2.5 pr-24 rounded-lg bg-slate-950/90 border border-slate-700/80 text-sm font-sans text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all"
+          className="w-full px-3.5 py-2.5 pr-48 rounded-lg bg-slate-950/90 border border-slate-700/80 text-sm font-sans text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all"
         />
-        <button
-          type="submit"
-          disabled={loading || !instruction.trim()}
-          className="absolute right-1.5 px-3 py-1.5 text-xs font-mono font-medium rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          {loading ? 'Compiling...' : 'Plan Task'}
-        </button>
+        <div className="absolute right-1.5 flex items-center gap-1.5">
+          <button
+            type="submit"
+            disabled={loading || !instruction.trim()}
+            className="px-2.5 py-1.5 text-xs font-mono font-medium rounded-md bg-cyan-600 hover:bg-cyan-500 text-white transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            title="Compile PDDL Plan Only"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Plan
+          </button>
+          <button
+            type="button"
+            onClick={handleExecuteOrchestrator}
+            disabled={loading}
+            className="px-2.5 py-1.5 text-xs font-mono font-medium rounded-md bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-white transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-md"
+            title="Run Full LangGraph Autonomous Agent Cycle"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            LangGraph Run
+          </button>
+        </div>
       </form>
 
       {/* Compiled PDDL Plan & Subgoals */}
@@ -115,7 +155,7 @@ export default function OllamaConsole({
               {activePlan.task_summary || 'Task Plan'}
             </span>
             <span className="text-[10px] text-slate-500">
-              Source: {activePlan.source || 'ollama'}
+              Source: {activePlan.source || selectedModel}
             </span>
           </div>
 
@@ -149,7 +189,7 @@ export default function OllamaConsole({
             })}
           </div>
 
-          {/* Supervisory Weights feedback */}
+          {/* Supervisory Weights */}
           {activePlan.supervisory_weights && (
             <div className="pt-2 border-t border-slate-800/80 flex items-center gap-4 text-[10px] text-slate-400">
               <span>Supervisory DRL Modulation:</span>
@@ -164,6 +204,20 @@ export default function OllamaConsole({
         </div>
       )}
 
+      {/* LangGraph Trace Logs */}
+      {orchestratorLogs && orchestratorLogs.length > 0 && (
+        <div className="p-2.5 rounded-lg bg-slate-950/80 border border-cyan-500/30 flex flex-col gap-1 font-mono text-[10px] text-slate-300 max-h-36 overflow-y-auto">
+          <span className="text-cyan-400 font-bold uppercase flex items-center gap-1 text-[11px]">
+            <Layers className="w-3 h-3" /> LangGraph Orchestration Trace:
+          </span>
+          {orchestratorLogs.map((log, idx) => (
+            <div key={idx} className="leading-relaxed border-l-2 border-cyan-500/40 pl-2 text-slate-300">
+              {log}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Post-Hoc Explainable AI (XAI) Forensics */}
       <div className="mt-1 pt-2 border-t border-slate-800/80 flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -172,7 +226,7 @@ export default function OllamaConsole({
             Explainable AI (XAI) Forensic Debrief
           </span>
           <button
-            onClick={onRequestXAI}
+            onClick={() => onRequestXAI && onRequestXAI(selectedModel)}
             className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
           >
             Generate Debrief

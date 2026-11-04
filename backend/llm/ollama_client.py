@@ -17,8 +17,8 @@ class OllamaRoboticClient:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        default_model: str = "llama3.2",
-        timeout_seconds: float = 8.0,
+        default_model: str = "qwen2.5:3b-instruct",
+        timeout_seconds: float = 45.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
@@ -27,15 +27,20 @@ class OllamaRoboticClient:
     async def check_status(self) -> Dict[str, Any]:
         """Check if local Ollama daemon is reachable and list downloaded models."""
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 res = await client.get(f"{self.base_url}/api/tags")
                 if res.status_code == 200:
                     data = res.json()
                     models = [m.get("name") for m in data.get("models", [])]
+                    # Select Qwen if available, otherwise default or first model
+                    active = next(
+                        (m for m in models if "qwen" in m.lower()),
+                        self.default_model if self.default_model in models else (models[0] if models else self.default_model),
+                    )
                     return {
                         "online": True,
                         "models": models,
-                        "active_model": models[0] if models else self.default_model,
+                        "active_model": active,
                         "backend": "local_ollama",
                     }
         except Exception:

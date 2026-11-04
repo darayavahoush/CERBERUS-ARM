@@ -9,7 +9,7 @@ import VisionHUD from './components/VisionHUD';
 import TelemetryPanel from './components/TelemetryPanel';
 import OllamaConsole from './components/OllamaConsole';
 import BenchmarkModal from './components/BenchmarkModal';
-import { Box, LayoutDashboard, Compass } from 'lucide-react';
+import { Box, LayoutDashboard } from 'lucide-react';
 
 export default function App() {
   // Navigation Tab ('home' | '3d_cockpit' | '2d_cockpit')
@@ -38,18 +38,19 @@ export default function App() {
   const [perceptionData, setPerceptionData] = useState(null);
   const [inspectLoading, setInspectLoading] = useState(false);
 
-  // Ollama & Reasoning
+  // Ollama & Reasoning & LangGraph
   const [activePlan, setActivePlan] = useState(null);
   const [activeSubgoalIdx, setActiveSubgoalIdx] = useState(0);
   const [xaiExplanation, setXaiExplanation] = useState('');
   const [planLoading, setPlanLoading] = useState(false);
+  const [orchestratorLogs, setOrchestratorLogs] = useState([]);
 
   // Benchmark
   const [isBenchmarkOpen, setIsBenchmarkOpen] = useState(false);
   const [benchmarkData, setBenchmarkData] = useState(null);
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
 
-  // View mode inside cockpit ('3d' | '2d')
+  // Viewport mode inside cockpit ('3d' | '2d')
   const [viewportMode, setViewportMode] = useState('3d');
 
   // Simulation timer ref
@@ -113,22 +114,29 @@ export default function App() {
         const data = await res.json();
         setObservation(data.observation);
         setRenderedImage(data.rendered_image);
-        setCurrentAction(data.action);
-        setQValues(data.q_values || []);
         setReward(data.reward);
         setCumulativeReward((prev) => prev + data.reward);
-        setRewardHistory((prev) => [...prev, data.reward]);
+        setRewardHistory((prev) => [...prev.slice(-30), data.reward]);
+        setCurrentAction(data.action);
+        setQValues(data.q_values || []);
 
         const succ = data.info?.is_success || false;
         const coll = data.info?.is_collision || false;
         setIsSuccess(succ);
         setIsCollision(coll);
 
+        if (coll) {
+          setIsPlaying(false);
+        }
+        if (succ) {
+          setIsPlaying(false);
+          confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } });
+        }
+
         if (data.observation?.grasped_idx !== null && data.observation?.grasped_idx !== undefined) {
           setActiveSubgoalIdx((idx) => Math.max(idx, 3));
         } else if (succ) {
           setActiveSubgoalIdx(4);
-          confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } });
         }
 
         if (data.terminated || data.truncated) {
@@ -159,14 +167,14 @@ export default function App() {
     setIsPlaying(!isPlaying);
   };
 
-  // Task Planner
-  const handlePlanTask = async (instruction) => {
+  // Compile task via Ollama Qwen
+  const handlePlanTask = async (instruction, modelName = 'qwen2.5:3b-instruct') => {
     setPlanLoading(true);
     try {
       const res = await fetch('/api/task/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction }),
+        body: JSON.stringify({ instruction, model_name: modelName }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -186,7 +194,44 @@ export default function App() {
     }
   };
 
-  // Perception Inspection
+  // Run End-to-End LangGraph Orchestrator
+  const handleRunOrchestrator = async (instruction, modelName = 'qwen2.5:3b-instruct') => {
+    setPlanLoading(true);
+    try {
+      const res = await fetch('/api/orchestrator/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction,
+          model_name: modelName,
+          max_steps: 30,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActivePlan(data.plan);
+        setObservation(data.observation);
+        setRenderedImage(data.rendered_image);
+        setCumulativeReward(data.cumulative_reward || 0);
+        setReward(data.cumulative_reward || 0);
+        setIsCollision(data.execution_status === 'collision');
+        setIsSuccess(data.execution_status === 'success');
+        setOrchestratorLogs(data.trace_logs || []);
+        if (data.xai_debrief) {
+          setXaiExplanation(data.xai_debrief);
+        }
+        if (data.execution_status === 'success') {
+          confetti({ particleCount: 75, spread: 65, origin: { y: 0.3 } });
+        }
+      }
+    } catch (err) {
+      console.error('LangGraph Orchestrator execution failed:', err);
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  // Run Perception Inspection
   const handleInspectPerception = async () => {
     setInspectLoading(true);
     try {
@@ -205,7 +250,7 @@ export default function App() {
   };
 
   // Request Explainable AI forensics
-  const handleRequestXAI = async () => {
+  const handleRequestXAI = async (modelName = 'qwen2.5:3b-instruct') => {
     try {
       const telemetry = {
         is_success: isSuccess,
@@ -219,7 +264,7 @@ export default function App() {
       const res = await fetch('/api/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telemetry }),
+        body: JSON.stringify({ telemetry, model_name: modelName }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -300,16 +345,18 @@ export default function App() {
       ) : (
         /* Cockpit Views ('3d_cockpit' or '2d_cockpit') */
         <main className="flex-1 p-4 sm:p-6 grid grid-cols-12 gap-5 max-w-[1760px] mx-auto w-full">
-          {/* Left Column: Perception HUD & Ollama Console (4 cols) */}
+          {/* Left Column: Perception HUD & LangGraph Ollama Console (4 cols) */}
           <div className="col-span-12 lg:col-span-4 flex flex-col gap-5">
             <OllamaConsole
               onPlanTask={handlePlanTask}
+              onRunOrchestrator={handleRunOrchestrator}
               activePlan={activePlan}
               activeSubgoalIdx={activeSubgoalIdx}
               xaiExplanation={xaiExplanation}
               onRequestXAI={handleRequestXAI}
               ollamaStatus={systemStatus?.ollama}
               loading={planLoading}
+              orchestratorLogs={orchestratorLogs}
             />
             <VisionHUD
               renderedImage={renderedImage}

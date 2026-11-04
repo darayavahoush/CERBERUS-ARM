@@ -2,6 +2,7 @@
 
 Provides:
 - Real-time REST endpoints for perception, DRL inference, and Ollama reasoning.
+- LangGraph Autonomous Multi-Agent Orchestrator endpoint (/api/orchestrator/run).
 - WebSocket bi-directional streaming for 60fps kinematics visualization.
 - Interactive training and benchmark execution APIs.
 """
@@ -25,6 +26,7 @@ from backend.models.perception_cnn import MultiTaskPerceptionCNN
 from backend.agent.d3qn_agent import D3QNAgent
 from backend.agent.policy_comparator import PolicyComparator
 from backend.llm.ollama_client import OllamaRoboticClient
+from backend.agent.orchestrator import LangGraphCerberusOrchestrator
 
 
 app = FastAPI(title="CERBERUS-ARM Manipulation Cockpit", version="1.0.0")
@@ -70,8 +72,18 @@ if os.path.exists(d3qn_weights_path):
 # Benchmark Suite
 comparator = PolicyComparator(env, agent)
 
-# Ollama Client
-ollama = OllamaRoboticClient()
+# Ollama Client (defaults to qwen2.5:3b-instruct)
+ollama = OllamaRoboticClient(default_model="qwen2.5:3b-instruct", timeout_seconds=45.0)
+
+# LangGraph Autonomous Orchestrator Agent
+orchestrator = LangGraphCerberusOrchestrator(
+    env=env,
+    agent=agent,
+    cnn_model=cnn_model,
+    renderer=renderer,
+    ollama_client=ollama,
+    device=device,
+)
 
 # Checkpoint directory
 os.makedirs("backend/data/checkpoints", exist_ok=True)
@@ -103,6 +115,13 @@ class SupervisoryWeightsRequest(BaseModel):
     collision_penalty: Optional[float] = None
     jerk_penalty: Optional[float] = None
     step_penalty: Optional[float] = None
+
+
+class OrchestratorRunRequest(BaseModel):
+    instruction: str
+    task_id: int = 1
+    model_name: Optional[str] = "qwen2.5:3b-instruct"
+    max_steps: int = 40
 
 
 # Helper to encode PIL image as Base64 string
@@ -143,7 +162,47 @@ async def get_system_status():
             "buffer_size": len(agent.replay_buffer),
         },
         "ollama": ollama_info,
+        "orchestrator": {
+            "engine": "LangGraph",
+            "state": "active",
+            "nodes": [
+                "perceive_workspace",
+                "plan_task_qwen",
+                "validate_safety",
+                "replan_with_caution",
+                "execute_d3qn_policy",
+                "explain_forensics_xai",
+            ],
+        },
         "receptacles": RECEPTACLES,
+    }
+
+
+@app.post("/api/orchestrator/run")
+async def run_langgraph_orchestration(req: OrchestratorRunRequest):
+    """Run end-to-end autonomous robotic manipulation via LangGraph."""
+    result = await orchestrator.run(
+        instruction=req.instruction,
+        task_id=req.task_id,
+        model_name=req.model_name or "qwen2.5:3b-instruct",
+        max_steps=req.max_steps,
+    )
+    obs = result.get("final_observation") or env.get_observation()
+    img = renderer.render_scene(
+        obs["fk"], obs["objects"], env.obstacles, RECEPTACLES, obs["gripper_closed"]
+    )
+    return {
+        "execution_status": result.get("execution_status"),
+        "steps_taken": result.get("steps_taken"),
+        "cumulative_reward": result.get("cumulative_reward"),
+        "jerk_index": result.get("jerk_index"),
+        "plan": result.get("plan"),
+        "perception": result.get("perception"),
+        "safety_assessment": result.get("safety_assessment"),
+        "xai_debrief": result.get("xai_debrief"),
+        "trace_logs": result.get("trace_logs"),
+        "observation": obs,
+        "rendered_image": image_to_base64(img),
     }
 
 
@@ -212,8 +271,6 @@ async def step_environment(req: StepRequest):
     obs_after, reward, terminated, truncated, info = env.step(action)
 
     # Store experience in HER replay buffer
-    target_pos = (obs_after["objects"][env.target_object_idx]["x"], obs_after["objects"][env.target_object_idx]["y"])
-    achieved_pos = (obs_after["fk"]["ee"][0], obs_after["fk"]["ee"][1])
     agent.replay_buffer.push(
         obs_before["vector"],
         action,
@@ -265,15 +322,16 @@ async def inspect_perception():
     # Generate Grad-CAM attention heatmap for predicted shape
     cam_map = cnn_model.generate_gradcam_heatmap(tensor, target_class=pred_shape_idx)
     # Downsample heatmap for JSON transmission efficiency (32x32)
-    cam_downsampled = cam_map[::8, ::8].tolist()
+    cam_small = []
+    if cam_map is not None:
+        step = max(cam_map.shape[0] // 32, 1)
+        cam_small = [[round(float(v), 2) for v in row[::step]] for row in cam_map[::step]]
 
     return {
-        "predicted_shape": SHAPES[pred_shape_idx % len(SHAPES)],
-        "predicted_color": list(COLORS.keys())[pred_color_idx % len(COLORS)],
-        "shape_probabilities": torch.softmax(shape_logits, dim=-1).squeeze().cpu().detach().tolist(),
-        "color_probabilities": torch.softmax(color_logits, dim=-1).squeeze().cpu().detach().tolist(),
-        "predicted_normalized_coords": [round(c, 4) for c in pred_coords],
-        "gradcam_heatmap": cam_downsampled,
+        "predicted_shape": SHAPES[pred_shape_idx],
+        "predicted_color": list(COLORS.keys())[pred_color_idx],
+        "predicted_coords": [round(c, 3) for c in pred_coords],
+        "gradcam_heatmap": cam_small,
         "confidence": round(float(torch.max(torch.softmax(shape_logits, dim=-1)).item()), 3),
     }
 
