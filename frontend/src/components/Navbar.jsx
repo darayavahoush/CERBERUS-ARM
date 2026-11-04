@@ -30,15 +30,15 @@ export default function Navbar({
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-slate-100 font-mono tracking-wider">
-              NEURO-ARM
+            <h1 className="text-base font-bold text-slate-100 font-mono tracking-wider flex items-center gap-1.5">
+              <span>CERBERUS-ARM</span>
             </h1>
             <span className="px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-              Q7 · RESEARCH GRADE
+              Q7 · TRI-MODAL DRL
             </span>
           </div>
           <p className="text-[11px] text-slate-400 font-sans">
-            Vision Perception (CoordConv CNN) · Dueling Double-DQN + HER · Grounded Ollama
+            Eye (CoordConv CNN) · Muscle (D3QN + HER) · Brain (Grounded Ollama)
           </p>
         </div>
       </div>

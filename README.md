@@ -1,4 +1,4 @@
-# NEURO-ARM: Intelligent Robotic Arm Manipulation with Language-Guided DRL
+# 🐺 CERBERUS-ARM: Tri-Modal Intelligent Robotic Manipulation with Language-Guided DRL
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.15-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -6,7 +6,12 @@
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-black?logo=ollama&logoColor=white)](https://ollama.ai/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An end-to-end, research-grade robotic manipulation system solving **Problem Statement #7** (*Intelligent Robotic Arm Manipulation with Language-Guided DRL*). Integrates a **Multi-Task CoordConv Spatial CNN**, a **Goal-Conditioned Dueling Double-DQN with Hindsight Experience Replay (D3QN+HER)**, a **Locally Grounded Ollama Reasoning Engine**, and a high-fidelity **React 19 + Canvas Kinematics Cockpit**.
+An end-to-end, research-grade robotic manipulation system solving **Problem Statement #7** (*Intelligent Robotic Arm Manipulation with Language-Guided DRL*). 
+
+Named after the mythological three-headed beast, **CERBERUS** unifies three distinct neural intelligences into a single embodied physical agent:
+1. **Head 1 (The Eye)**: Multi-Task CoordConv Spatial Perception CNN with Grad-CAM visual attention.
+2. **Head 2 (The Muscle)**: Goal-Conditioned Dueling Double-DQN with Hindsight Experience Replay (D3QN+HER) and Yoshikawa Singularity Avoidance.
+3. **Head 3 (The Brain)**: Locally Grounded Ollama Reasoning Engine for PDDL subgoal compilation and post-hoc XAI forensics.
 
 ---
 
@@ -19,18 +24,21 @@ An end-to-end, research-grade robotic manipulation system solving **Problem Stat
                                   └───────────────┬───────────────┘
                                                   ▼
                                   ┌───────────────────────────────┐
+                                  │     HEAD 3: THE REASONER      │
                                   │      Local Ollama LLM /       │
                                   │    Neuro-Symbolic Compiler    │
                                   └───────────────┬───────────────┘
                                                   │ (JSON PDDL Goal & Supervisory Weights)
                                                   ▼
 ┌────────────────────────┐        ┌───────────────────────────────┐
-│ Synthetic Camera Feed  │ ─────> │     CoordConv Multi-Task CNN  │ ──> [Grad-CAM & Latents]
-│ (2D Workspace Render)  │        │ (Shape, Color, Centroid Regr) │
-└────────────────────────┘        └───────────────┬───────────────┘
+│ Synthetic Camera Feed  │ ─────> │       HEAD 1: THE EYE         │ ──> [Grad-CAM & Latents]
+│ (2D Workspace Render)  │        │   CoordConv Multi-Task CNN    │
+└────────────────────────┘        │ (Shape, Color, Centroid Regr) │
+                                  └───────────────┬───────────────┘
                                                   │
                                                   ▼
                                   ┌───────────────────────────────┐
+                                  │      HEAD 2: THE MUSCLE       │
                                   │  Goal-Conditioned D3QN + HER  │
                                   │ (Dueling Double-Q Value Net)  │
                                   └───────────────┬───────────────┘
@@ -98,8 +106,8 @@ An end-to-end, research-grade robotic manipulation system solving **Problem Stat
 ### 1. Setup & Installation
 ```bash
 # Clone the repository
-git clone https://github.com/darayavahoush/avi-ana.git
-cd avi-ana
+git clone https://github.com/darayavahoush/CERBERUS-ARM.git
+cd CERBERUS-ARM
 
 # Create Python virtual environment and install dependencies
 uv venv --python 3.12 .venv
