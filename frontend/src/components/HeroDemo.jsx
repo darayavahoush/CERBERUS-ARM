@@ -39,7 +39,7 @@ export default function HeroDemo() {
           setObs(r.observation); setTrail((t) => [...t, r.observation.fk.ee].slice(-50));
           await sleep(55);
         } while (!r.terminated && !r.truncated);
-        setStatus(r.info.is_success ? 'Placed' : 'Stopped');
+        setStatus(r.info.is_success ? 'Placed' : r.info.is_collision ? 'Collision · stopped safely' : 'Stopped');
         await sleep(1800);
       }
     })();

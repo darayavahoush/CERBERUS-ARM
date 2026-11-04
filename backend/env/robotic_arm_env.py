@@ -240,7 +240,6 @@ class RoboticArmEnv:
         self.prev_theta1 = self.theta1
         self.prev_theta2 = self.theta2
         self.prev_theta3 = self.theta3
-
         # Spawn 4 to 6 randomized components
         count = num_components if num_components is not None else random.randint(4, 5)
         self.objects = self.generate_random_sample_space(
@@ -345,6 +344,11 @@ class RoboticArmEnv:
         self.prev_theta1 = self.theta1
         self.prev_theta2 = self.theta2
         self.prev_theta3 = self.theta3
+        prev_gripper_closed = self.gripper_closed
+        prev_grasped_object_idx = self.grasped_object_idx
+        prev_object_states = [
+            (obj["x"], obj["y"], obj.get("is_grasped", False)) for obj in self.objects
+        ]
 
         fk_before = self.kinematics.forward_kinematics(self.theta1, self.theta2, self.theta3)
         target_obj = self.objects[self.target_object_idx]
@@ -412,6 +416,21 @@ class RoboticArmEnv:
         collision = self.kinematics.check_collision_circle(
             self.theta1, self.theta2, self.theta3, obs["x"], obs["y"], obs["radius"]
         )
+
+        if collision:
+            # Report the collision while keeping the simulator and renderer at the last safe pose.
+            self.theta1 = self.prev_theta1
+            self.theta2 = self.prev_theta2
+            self.theta3 = self.prev_theta3
+            self.gripper_closed = prev_gripper_closed
+            self.grasped_object_idx = prev_grasped_object_idx
+            for obj, (x, y, was_grasped) in zip(self.objects, prev_object_states):
+                obj["x"] = x
+                obj["y"] = y
+                obj["is_grasped"] = was_grasped
+
+            fk_after = self.kinematics.forward_kinematics(self.theta1, self.theta2, self.theta3)
+            ee_x, ee_y = fk_after["ee"]
 
         curr_dist_ee_obj = math.hypot(ee_x - target_obj["x"], ee_y - target_obj["y"])
         curr_dist_obj_goal = math.hypot(

@@ -1,6 +1,6 @@
 // In-browser stand-in for the FastAPI backend. Same response shapes as backend/app.py,
 // so pages never know which one they are talking to.
-import { RECEPTACLES, DEFAULT_PILLAR, SHAPES, COLOR_NAMES, fk, ik, dist, L1, L2, L3 } from '../utils/kinematics';
+import { RECEPTACLES, DEFAULT_PILLAR, SHAPES, COLOR_NAMES, fk, ik, dist, armIntersectsCircle, L1, L2, L3 } from '../utils/kinematics';
 
 const DELTA = 0.07;
 const MAX_STEPS = 140;
@@ -97,7 +97,6 @@ export function createMockBackend(seed = 7) {
     return observation();
   }
 
-  function pillarHit(p) { return dist(p, [pillar.x, pillar.y]) < pillar.radius + 0.04; }
   const clampJoints = (t1, t2, t3) => [
     Math.min(2.6, Math.max(-2.6, t1)),
     Math.min(2.35, Math.max(-2.35, t2)),
@@ -135,6 +134,7 @@ export function createMockBackend(seed = 7) {
     s.step += 1;
     s.lastAction = a;
 
+    const previousAngles = [s.t1, s.t2, s.t3];
     let reward = -0.05;
     let success = false;
     if (a === 0) s.t1 += DELTA; else if (a === 1) s.t1 -= DELTA;
@@ -143,6 +143,8 @@ export function createMockBackend(seed = 7) {
     else if (a === 7) { s.t1 += DELTA * 0.4; s.t2 -= DELTA * 0.4; s.t3 += DELTA * 0.2; }
     [s.t1, s.t2, s.t3] = clampJoints(s.t1, s.t2, s.t3);
 
+    const collision = armIntersectsCircle(s.t1, s.t2, s.t3, pillar);
+    if (collision) [s.t1, s.t2, s.t3] = previousAngles;
     const f = fk(s.t1, s.t2, s.t3);
     if (a === 6) { // Toggle gripper
       if (!s.closed) {
@@ -161,7 +163,6 @@ export function createMockBackend(seed = 7) {
     const after = dist(f.ee, s.grasped !== null ? goalPos() : [o.x, o.y]);
     reward += 2.5 * (before - after);
 
-    const collision = pillarHit(f.ee) || pillarHit(f.wrist);
     if (collision) reward -= 30;
     const terminated = success || collision;
     const truncated = !terminated && s.step >= MAX_STEPS;

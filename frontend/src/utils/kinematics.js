@@ -47,6 +47,23 @@ export function fk(t1, t2, t3 = 0) {
   return { base: [0, 0], elbow, wrist, ee, phi: t1 + t2 + t3 };
 }
 
+export function distancePointToSegment(point, start, end) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (!lengthSquared) return dist(point, start);
+  const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared));
+  return dist(point, [start[0] + t * dx, start[1] + t * dy]);
+}
+
+export function armIntersectsCircle(theta1, theta2, theta3, obstacle, linkRadius = 0.05) {
+  const pose = fk(theta1, theta2, theta3);
+  const center = [obstacle.x, obstacle.y];
+  const clearance = obstacle.radius + linkRadius;
+  return [[pose.base, pose.elbow], [pose.elbow, pose.wrist], [pose.wrist, pose.ee]]
+    .some(([start, end]) => distancePointToSegment(center, start, end) < clearance);
+}
+
 // 3-DOF Inverse Kinematics with approach orientation
 export function ik(x, y, phi = null) {
   const targetPhi = phi !== null ? phi : Math.atan2(y, x) - Math.PI / 4;
