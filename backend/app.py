@@ -60,15 +60,15 @@ if os.path.exists(cnn_weights_path):
         print(f"[!] Warning loading CNN weights: {e}")
 cnn_model.eval()
 
-# D3QN Agent
-agent = D3QNAgent(state_dim=15, action_dim=7, device=device)
+# D3QN Agent for 3-DOF Arm (18 state features, 9 discrete actions)
+agent = D3QNAgent(state_dim=18, action_dim=9, device=device)
 d3qn_weights_path = "backend/data/checkpoints/d3qn_weights.pth"
 if os.path.exists(d3qn_weights_path):
     try:
         agent.load_checkpoint(d3qn_weights_path)
         print(f"[+] Loaded pre-trained D3QN agent weights from {d3qn_weights_path}")
     except Exception as e:
-        print(f"[!] Warning loading D3QN weights: {e}")
+        print(f"[!] Re-initializing fresh D3QN weights for 3-DOF workcell: {e}")
 
 # Benchmark Suite
 comparator = PolicyComparator(env, agent)
@@ -155,7 +155,7 @@ def image_to_base64(img) -> str:
 @app.get("/api/mujoco/state")
 async def get_mujoco_state():
     """Retrieve real-time MuJoCo 3D physics state."""
-    mujoco_env.set_joints(env.theta1, env.theta2, env.gripper_closed)
+    mujoco_env.set_joints(env.theta1, env.theta2, env.theta3, env.gripper_closed)
     return mujoco_env.get_3d_state()
 
 
@@ -305,7 +305,7 @@ async def step_environment(req: StepRequest):
     )
 
     # Sync MuJoCo physics state
-    mujoco_env.set_joints(obs_after["theta1"], obs_after["theta2"], obs_after["gripper_closed"])
+    mujoco_env.set_joints(obs_after["theta1"], obs_after["theta2"], obs_after["theta3"], obs_after["gripper_closed"])
     mujoco_state = mujoco_env.get_3d_state()
 
     return {

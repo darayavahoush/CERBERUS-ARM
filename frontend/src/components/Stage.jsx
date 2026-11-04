@@ -60,7 +60,7 @@ export default function Stage({ observation: obs, obstacles = [], trail = [], on
 
       {/* Render 3D MuJoCo Twin */}
       {viewMode === '3d' ? (
-        <div style={{ height: 460 }}>
+        <div className="w-full">
           <MuJoCoStage3D
             observation={obs}
             obstacles={obstacles}
@@ -73,8 +73,9 @@ export default function Stage({ observation: obs, obstacles = [], trail = [], on
         <div className="stage">
           {showHud && obs && (
             <div className="hud" aria-hidden>
-              <span className="tag">Shoulder {radToDeg(obs.theta1)}°</span>
-              <span className="tag">Elbow {radToDeg(obs.theta2)}°</span>
+              <span className="tag">J1 {radToDeg(obs.theta1)}°</span>
+              <span className="tag">J2 {radToDeg(obs.theta2)}°</span>
+              <span className="tag">J3 {radToDeg(obs.theta3 ?? -0.42)}°</span>
               <span className="tag">{grasped ? 'Carrying' : obs.gripper_closed ? 'Gripper closed' : 'Gripper open'}</span>
             </div>
           )}
@@ -135,7 +136,15 @@ export default function Stage({ observation: obs, obstacles = [], trail = [], on
             {obs?.fk && (
               <g>
                 <line x1={obs.fk.base[0]} y1={Y(obs.fk.base[1])} x2={obs.fk.elbow[0]} y2={Y(obs.fk.elbow[1])} stroke="#fff" strokeWidth="0.065" strokeLinecap="round" />
-                <line x1={obs.fk.elbow[0]} y1={Y(obs.fk.elbow[1])} x2={obs.fk.ee[0]} y2={Y(obs.fk.ee[1])} stroke="#f5c518" strokeWidth="0.05" strokeLinecap="round" />
+                {obs.fk.wrist ? (
+                  <>
+                    <line x1={obs.fk.elbow[0]} y1={Y(obs.fk.elbow[1])} x2={obs.fk.wrist[0]} y2={Y(obs.fk.wrist[1])} stroke="#38bdf8" strokeWidth="0.055" strokeLinecap="round" />
+                    <line x1={obs.fk.wrist[0]} y1={Y(obs.fk.wrist[1])} x2={obs.fk.ee[0]} y2={Y(obs.fk.ee[1])} stroke="#f5c518" strokeWidth="0.045" strokeLinecap="round" />
+                    <circle cx={obs.fk.wrist[0]} cy={Y(obs.fk.wrist[1])} r="0.055" fill="#f5c518" stroke="#1b2f8e" strokeWidth="0.015" />
+                  </>
+                ) : (
+                  <line x1={obs.fk.elbow[0]} y1={Y(obs.fk.elbow[1])} x2={obs.fk.ee[0]} y2={Y(obs.fk.ee[1])} stroke="#f5c518" strokeWidth="0.05" strokeLinecap="round" />
+                )}
                 <circle cx={obs.fk.base[0]} cy={Y(obs.fk.base[1])} r="0.09" fill="#1b2f8e" stroke="#fff" strokeWidth="0.02" />
                 <circle cx={obs.fk.elbow[0]} cy={Y(obs.fk.elbow[1])} r="0.07" fill="#1b2f8e" stroke="#fff" strokeWidth="0.02" />
                 <circle cx={obs.fk.ee[0]} cy={Y(obs.fk.ee[1])} r="0.05" fill={grasped ? '#22c55e' : obs.gripper_closed ? '#ef4444' : '#fff'} stroke="#1b2f8e" strokeWidth="0.02" />

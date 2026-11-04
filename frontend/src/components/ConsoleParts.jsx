@@ -7,9 +7,10 @@ import { ACTIONS, COLOR_NAMES, SHAPES } from '../utils/kinematics';
 import { subgoalIndex } from '../lib/SimProvider';
 
 export const PRESETS = [
-  'Pick the red cube and put it in the green bin',
-  'Carefully move the blue sphere to the red bin',
-  'Quickly place the yellow star in the blue bin',
+  'Sort the red micro-module into Bay A (SMT Staging)',
+  'Carefully route the blue quartz lens to Bay B (AOI Inspection)',
+  'Transfer the green prism into Bay C (Cleanroom QA)',
+  'Rapidly place the yellow sensor hub in Bay B avoiding the laser spindle',
 ];
 
 const STEP_LABELS = ['Approach target', 'Align gripper', 'Grasp', 'Carry past the pillar', 'Release in bay'];

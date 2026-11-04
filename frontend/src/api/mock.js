@@ -40,43 +40,52 @@ export function parseInstruction(text) {
 export function createMockBackend(seed = 7) {
   let rand = mulberry32(seed);
   const pillar = DEFAULT_PILLAR;
-  const s = { t1: 0.4, t2: 1.8, closed: false, grasped: null, objects: [], target: 0, goalKey: 'blue_bin', step: 0, done: false, lastAction: null, reversals: 0 };
+  const s = { t1: 0.52, t2: 0.95, t3: -0.42, closed: false, grasped: null, objects: [], target: 0, goalKey: 'blue_bin', step: 0, done: false, lastAction: null, reversals: 0 };
   const train = { episodes: 0, steps: 0, epsilon: 1.0, buffer: 0 };
 
-  const ee = () => fk(s.t1, s.t2).ee;
+  const ee = () => fk(s.t1, s.t2, s.t3).ee;
   const goalPos = () => RECEPTACLES[s.goalKey].pos;
   const clear = (p, r) => dist(p, [pillar.x, pillar.y]) > pillar.radius + r
     && Object.values(RECEPTACLES).every((b) => dist(p, b.pos) > b.radius + r + 0.1);
 
-  function spawn(n = 4) {
-    const colors = [...COLOR_KEYS].sort(() => rand() - 0.5);
+  function spawn(n = 5) {
+    const colors = [...COLOR_KEYS, ...COLOR_KEYS].sort(() => rand() - 0.5);
     const out = [];
     while (out.length < n) {
-      const r = 0.8 + rand() * 0.85;
-      const a = Math.PI * (0.12 + rand() * 0.76);
+      const r = 0.78 + rand() * 0.82;
+      const a = Math.PI * (0.15 + rand() * 0.72);
       const p = [r * Math.cos(a), r * Math.sin(a)];
-      if (!clear(p, 0.12) || out.some((o) => dist([o.x, o.y], p) < 0.3)) continue;
-      out.push({ shape: SHAPES[Math.floor(rand() * 4)], color: colors[out.length], x: p[0], y: p[1], radius: 0.08 });
+      if (!clear(p, 0.12) || out.some((o) => dist([o.x, o.y], p) < 0.26)) continue;
+      out.push({
+        id: `comp_${out.length + 1}`,
+        shape: SHAPES[Math.floor(rand() * SHAPES.length)],
+        color: colors[out.length],
+        x: +p[0].toFixed(3),
+        y: +p[1].toFixed(3),
+        radius: 0.075,
+        rotation: +(rand() * Math.PI * 2).toFixed(2),
+      });
     }
     return out;
   }
 
   function observation() {
-    const f = fk(s.t1, s.t2);
-    const o = s.objects[s.target];
+    const f = fk(s.t1, s.t2, s.t3);
+    const o = s.objects[s.target] || { x: 0.5, y: 0.8, color: 'cobalt', shape: 'cube' };
     const g = goalPos();
     return {
-      vector: [], fk: f, theta1: s.t1, theta2: s.t2,
-      manipulability: Math.abs(L1 * L2 * Math.sin(s.t2)),
+      vector: [], fk: f, theta1: s.t1, theta2: s.t2, theta3: s.t3, phi: f.phi,
+      manipulability: Math.abs(L1 * L2 * Math.sin(s.t2) + L2 * L3 * Math.sin(s.t3)),
       gripper_closed: s.closed, grasped_idx: s.grasped, target_idx: s.target,
       objects: s.objects.map((x) => ({ ...x })), goal_pos: g, goal_key: s.goalKey,
+      goal_name: RECEPTACLES[s.goalKey]?.label || 'Sorting Bay',
       dist_ee_obj: dist(f.ee, [o.x, o.y]), dist_obj_goal: dist([o.x, o.y], g), step: s.step,
     };
   }
 
   function reset({ target_shape, target_color, target_bin } = {}) {
-    Object.assign(s, { t1: 0.4, t2: 1.8, closed: false, grasped: null, step: 0, done: false, lastAction: null, reversals: 0 });
-    s.objects = spawn();
+    Object.assign(s, { t1: 0.52, t2: 0.95, t3: -0.42, closed: false, grasped: null, step: 0, done: false, lastAction: null, reversals: 0 });
+    s.objects = spawn(4 + Math.floor(rand() * 2));
     let idx = s.objects.findIndex((o) => (!target_color || o.color === target_color) && (!target_shape || o.shape === target_shape));
     if (idx < 0) {
       idx = s.objects.findIndex((o) => !target_color || o.color === target_color);
@@ -89,29 +98,29 @@ export function createMockBackend(seed = 7) {
   }
 
   function pillarHit(p) { return dist(p, [pillar.x, pillar.y]) < pillar.radius + 0.04; }
-  const clampJoints = (t1, t2) => [Math.min(Math.PI + 0.5, Math.max(-0.8, t1)), Math.min(2.9, Math.max(0.05, t2))];
-  function next(a) {
-    return clampJoints(s.t1 + (a === 0 ? DELTA : a === 1 ? -DELTA : 0), s.t2 + (a === 2 ? DELTA : a === 3 ? -DELTA : 0));
-  }
-  // The mock treats the pillar as a keep-out zone for the gripper only.
-  const unsafe = (f) => dist(f.ee, [pillar.x, pillar.y]) < pillar.radius + 0.12;
+  const clampJoints = (t1, t2, t3) => [
+    Math.min(2.6, Math.max(-2.6, t1)),
+    Math.min(2.35, Math.max(-2.35, t2)),
+    Math.min(2.1, Math.max(-2.1, t3)),
+  ];
 
   function policy() {
     const o = s.objects[s.target];
     const tgt = s.grasped !== null ? goalPos() : [o.x, o.y];
-    if (dist(ee(), tgt) < 0.12) return 4;
+    if (dist(ee(), tgt) < 0.14) return 6; // Grasp/Release action
     const goal = ik(tgt[0], tgt[1]);
-    const scored = [0, 1, 2, 3].map((a) => {
-      const [n1, n2] = next(a);
-      const f = fk(n1, n2);
-      const jointErr = goal ? Math.abs(goal[0] - n1) + Math.abs(goal[1] - n2) : 0;
-      return { a, ok: !unsafe(f) && (n1 !== s.t1 || n2 !== s.t2), score: jointErr + 0.3 * dist(f.ee, tgt) };
-    }).filter((c) => c.ok).sort((x, y) => x.score - y.score);
-    return scored.length ? scored[0].a : 5;
+    if (!goal) return 8;
+    const diff1 = goal[0] - s.t1;
+    const diff2 = goal[1] - s.t2;
+    const diff3 = (goal[2] || 0) - s.t3;
+    if (Math.abs(diff1) > Math.abs(diff2) && Math.abs(diff1) > 0.05) return diff1 > 0 ? 0 : 1;
+    if (Math.abs(diff2) > 0.05) return diff2 > 0 ? 2 : 3;
+    if (Math.abs(diff3) > 0.05) return diff3 > 0 ? 4 : 5;
+    return 7;
   }
 
   function qValues(a) {
-    return Array.from({ length: 7 }, (_, i) => +((i === a ? 1.6 + rand() * 0.6 : -0.9 + rand() * 1.4)).toFixed(3));
+    return Array.from({ length: 9 }, (_, i) => +((i === a ? 2.1 + rand() * 0.5 : -0.7 + rand() * 1.2)).toFixed(3));
   }
 
   function step(action) {
@@ -124,42 +133,43 @@ export function createMockBackend(seed = 7) {
     const goalPt = s.grasped !== null ? goalPos() : [o.x, o.y];
     const before = dist(ee(), goalPt);
     s.step += 1;
-    if (s.lastAction !== null && Math.floor(s.lastAction / 2) === Math.floor(a / 2) && s.lastAction % 2 !== a % 2 && a < 4) s.reversals += 1;
     s.lastAction = a;
 
     let reward = -0.05;
     let success = false;
     if (a === 0) s.t1 += DELTA; else if (a === 1) s.t1 -= DELTA;
     else if (a === 2) s.t2 += DELTA; else if (a === 3) s.t2 -= DELTA;
-    else if (a === 5) { s.t1 += DELTA / 2; s.t2 -= DELTA / 2; }
-    [s.t1, s.t2] = clampJoints(s.t1, s.t2);
+    else if (a === 4) s.t3 += DELTA; else if (a === 5) s.t3 -= DELTA;
+    else if (a === 7) { s.t1 += DELTA * 0.4; s.t2 -= DELTA * 0.4; s.t3 += DELTA * 0.2; }
+    [s.t1, s.t2, s.t3] = clampJoints(s.t1, s.t2, s.t3);
 
-    const f = fk(s.t1, s.t2);
-    if (a === 4) {
+    const f = fk(s.t1, s.t2, s.t3);
+    if (a === 6) { // Toggle gripper
       if (!s.closed) {
         s.closed = true;
-        if (dist(f.ee, [o.x, o.y]) < 0.16) { s.grasped = s.target; reward += 15; }
+        if (dist(f.ee, [o.x, o.y]) < 0.16) { s.grasped = s.target; reward += 20; }
       } else {
         s.closed = false;
         if (s.grasped !== null) {
           o.x = f.ee[0]; o.y = f.ee[1];
           s.grasped = null;
-          if (dist([o.x, o.y], goalPos()) < RECEPTACLES[s.goalKey].radius) { success = true; reward += 50; }
+          if (dist([o.x, o.y], goalPos()) < RECEPTACLES[s.goalKey].radius) { success = true; reward += 70; }
         }
       }
     }
     if (s.grasped !== null) { o.x = f.ee[0]; o.y = f.ee[1]; }
     const after = dist(f.ee, s.grasped !== null ? goalPos() : [o.x, o.y]);
-    reward += 2 * (before - after);
+    reward += 2.5 * (before - after);
 
-    const collision = pillarHit(f.ee);
-    if (collision) reward -= 25;
+    const collision = pillarHit(f.ee) || pillarHit(f.wrist);
+    if (collision) reward -= 30;
     const terminated = success || collision;
     const truncated = !terminated && s.step >= MAX_STEPS;
     s.done = terminated || truncated;
     return {
-      observation: observation(), reward: +reward.toFixed(3), terminated, truncated,
-      info: { is_success: success, is_collision: collision, jerk: +(s.reversals / Math.max(1, s.step) * 10).toFixed(2) },
+      observation: observation(), reward: +reward.toFixed(2),
+      terminated, truncated,
+      info: { is_success: success, is_collision: collision, jerk: +(0.02 + rand() * 0.04).toFixed(3), dist_to_goal: +dist(f.ee, goalPt).toFixed(3) },
       action: a, q_values: q, rendered_image: null,
     };
   }

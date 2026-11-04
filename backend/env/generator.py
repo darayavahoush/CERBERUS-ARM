@@ -135,19 +135,30 @@ class WorkspaceRenderer:
                 ]
                 draw.polygon(pts, fill=col, outline=(255, 255, 255))
 
-        # Draw Robotic Arm Links & Joints
+        # Draw Robotic Arm Links & Joints (3-DOF Articulated Manipulator)
         bx, by = self.world_to_pixel(fk["base"][0], fk["base"][1])
         ex, ey = self.world_to_pixel(fk["elbow"][0], fk["elbow"][1])
         tx, ty = self.world_to_pixel(fk["ee"][0], fk["ee"][1])
 
-        # Link 1
-        draw.line([bx, by, ex, ey], fill=(56, 189, 248), width=6)
-        # Link 2
-        draw.line([ex, ey, tx, ty], fill=(6, 182, 212), width=5)
+        if "wrist" in fk:
+            wx, wy = self.world_to_pixel(fk["wrist"][0], fk["wrist"][1])
+            # Link 1 (Shoulder to Elbow)
+            draw.line([bx, by, ex, ey], fill=(56, 189, 248), width=6)
+            # Link 2 (Elbow to Wrist)
+            draw.line([ex, ey, wx, wy], fill=(6, 182, 212), width=5)
+            # Link 3 (Wrist to Tool)
+            draw.line([wx, wy, tx, ty], fill=(245, 197, 24), width=4)
 
-        # Joints
-        draw.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(14, 165, 233), outline=(255, 255, 255), width=2)
-        draw.ellipse([ex - 6, ey - 6, ex + 6, ey + 6], fill=(56, 189, 248), outline=(255, 255, 255), width=2)
+            # Joints
+            draw.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(14, 165, 233), outline=(255, 255, 255), width=2)
+            draw.ellipse([ex - 6, ey - 6, ex + 6, ey + 6], fill=(56, 189, 248), outline=(255, 255, 255), width=2)
+            draw.ellipse([wx - 5, wy - 5, wx + 5, wy + 5], fill=(245, 197, 24), outline=(255, 255, 255), width=2)
+        else:
+            # Fallback 2-link
+            draw.line([bx, by, ex, ey], fill=(56, 189, 248), width=6)
+            draw.line([ex, ey, tx, ty], fill=(6, 182, 212), width=5)
+            draw.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(14, 165, 233), outline=(255, 255, 255), width=2)
+            draw.ellipse([ex - 6, ey - 6, ex + 6, ey + 6], fill=(56, 189, 248), outline=(255, 255, 255), width=2)
 
         # Gripper
         grip_col = (244, 63, 94) if gripper_closed else (16, 185, 129)

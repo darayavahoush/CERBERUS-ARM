@@ -14,8 +14,8 @@ def main():
 
     env = RoboticArmEnv()
     agent = D3QNAgent(
-        state_dim=15,
-        action_dim=7,
+        state_dim=18,
+        action_dim=9,
         lr=7e-4,
         gamma=0.98,
         tau=0.01,
