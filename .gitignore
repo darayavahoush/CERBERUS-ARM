@@ -1,0 +1,34 @@
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+
+# Logs & System
+*.log
+.DS_Store
+.env
+.env.*.local
+
+# Checkpoints & weights
+*.pt
+*.pth
+*.onnx
+data/generated_images/
+runs/
