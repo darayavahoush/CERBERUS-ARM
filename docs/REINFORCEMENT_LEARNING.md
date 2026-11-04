@@ -8,37 +8,42 @@ This document formalizes the reinforcement learning formulation powering **Head 
 
 The robotic manipulation problem is formulated as a Goal-Conditioned Markov Decision Process $\langle \mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \gamma, \mathcal{G} \rangle$:
 
-### State Space $\mathcal{S} \subset \mathbb{R}^{15}$
-At each timestep $t$, the state vector $s_t$ encapsulates kinematics, dynamics, and environmental geometry:
+### State Space $\mathcal{S} \subset \mathbb{R}^{18}$ (3-DOF Articulated Manipulator)
+At each timestep $t$, the state vector $s_t$ encapsulates 3-DOF kinematics, orientation, dynamics, and environmental geometry:
 
 | Index | Feature | Range | Description |
 | :---: | :--- | :---: | :--- |
-| `0` | $\theta_1 / \pi$ | $[-0.25, 1.17]$ | Base joint angle normalized by $\pi$ |
+| `0` | $\theta_1 / \pi$ | $[-0.25, 1.17]$ | Shoulder joint angle normalized by $\pi$ |
 | `1` | $\theta_2 / \pi$ | $[0.03, 0.92]$ | Elbow joint angle normalized by $\pi$ |
-| `2` | $(\theta_1 - \theta_{1, prev}) / \Delta\theta$ | $[-1.0, 1.0]$ | Base joint angular velocity |
-| `3` | $(\theta_2 - \theta_{2, prev}) / \Delta\theta$ | $[-1.0, 1.0]$ | Elbow joint angular velocity |
-| `4` | $x_{ee} / R_{max}$ | $[-1.0, 1.0]$ | End-effector Cartesian X |
-| `5` | $y_{ee} / R_{max}$ | $[-1.0, 1.0]$ | End-effector Cartesian Y |
-| `6` | $g_{state}$ | $\{0, 1\}$ | Gripper status (1: closed, 0: open) |
-| `7` | $g_{has\_obj}$ | $\{0, 1\}$ | Object grasped indicator |
-| `8` | $x_{obj} / R_{max}$ | $[-1.0, 1.0]$ | Target object Cartesian X |
-| `9` | $y_{obj} / R_{max}$ | $[-1.0, 1.0]$ | Target object Cartesian Y |
-| `10` | $x_{goal} / R_{max}$ | $[-1.0, 1.0]$ | Receptacle destination X |
-| `11` | $y_{goal} / R_{max}$ | $[-1.0, 1.0]$ | Receptacle destination Y |
-| `12` | $\min(d(ee, obj), 3.0)$ | $[0.0, 3.0]$ | Euclidean distance: End-effector to object |
-| `13` | $\min(d(obj, goal), 3.0)$| $[0.0, 3.0]$ | Euclidean distance: Object to goal receptacle |
-| `14` | $w(q) = |L_1 L_2 \sin(\theta_2)|$ | $[0.0, 0.8]$ | Yoshikawa manipulability metric |
+| `2` | $\theta_3 / \pi$ | $[-0.67, 0.67]$ | Wrist joint pitch normalized by $\pi$ |
+| `3` | $(\theta_1 - \theta_{1, prev}) / \Delta\theta$ | $[-1.0, 1.0]$ | Shoulder joint angular velocity |
+| `4` | $(\theta_2 - \theta_{2, prev}) / \Delta\theta$ | $[-1.0, 1.0]$ | Elbow joint angular velocity |
+| `5` | $(\theta_3 - \theta_{3, prev}) / \Delta\theta$ | $[-1.0, 1.0]$ | Wrist joint angular velocity |
+| `6` | $x_{ee} / R_{max}$ | $[-1.0, 1.0]$ | End-effector Cartesian X |
+| `7` | $y_{ee} / R_{max}$ | $[-1.0, 1.0]$ | End-effector Cartesian Y |
+| `8` | $\phi / \pi = (\theta_1 + \theta_2 + \theta_3) / \pi$ | $[-1.0, 1.0]$ | End-effector tool heading orientation |
+| `9` | $g_{state}$ | $\{0, 1\}$ | Gripper status (1: closed, 0: open) |
+| `10` | $g_{has\_obj}$ | $\{0, 1\}$ | Object grasped indicator |
+| `11` | $x_{obj} / R_{max}$ | $[-1.0, 1.0]$ | Target object Cartesian X |
+| `12` | $y_{obj} / R_{max}$ | $[-1.0, 1.0]$ | Target object Cartesian Y |
+| `13` | $x_{goal} / R_{max}$ | $[-1.0, 1.0]$ | Receptacle destination X |
+| `14` | $y_{goal} / R_{max}$ | $[-1.0, 1.0]$ | Receptacle destination Y |
+| `15` | $\min(d(ee, obj), 3.0)$ | $[0.0, 3.0]$ | Euclidean distance: End-effector to object |
+| `16` | $\min(d(obj, goal), 3.0)$| $[0.0, 3.0]$ | Euclidean distance: Object to goal receptacle |
+| `17` | $w(q) = \sqrt{\det(J J^T)}$ | $[0.0, 1.2]$ | Yoshikawa manipulability metric |
 
-### Action Space $\mathcal{A} = \{0, 1, 2, 3, 4, 5, 6\}$ (7 Discrete Primitives)
-- `0`: $\theta_1 \leftarrow \theta_1 + \Delta\theta$ (Base Shoulder Forward)
-- `1`: $\theta_1 \leftarrow \theta_1 - \Delta\theta$ (Base Shoulder Reverse)
-- `2`: $\theta_2 \leftarrow \theta_2 + \Delta\theta$ (Elbow Flex)
-- `3`: $\theta_2 \leftarrow \theta_2 - \Delta\theta$ (Elbow Extend)
-- `4`: Toggle Gripper (Grasp / Release)
-- `5`: Micro-Align ($\theta_1 + 0.5\Delta\theta, \theta_2 - 0.5\Delta\theta$)
-- `6`: Hold / Idle
+### Action Space $\mathcal{A} = \{0, 1, 2, 3, 4, 5, 6, 7, 8\}$ (9 Discrete Primitives)
+- `0`: $\theta_1 \leftarrow \theta_1 + \Delta\theta$ (Shoulder +Yaw)
+- `1`: $\theta_1 \leftarrow \theta_1 - \Delta\theta$ (Shoulder -Yaw)
+- `2`: $\theta_2 \leftarrow \theta_2 + \Delta\theta$ (Elbow +Pitch)
+- `3`: $\theta_2 \leftarrow \theta_2 - \Delta\theta$ (Elbow -Pitch)
+- `4`: $\theta_3 \leftarrow \theta_3 + \Delta\theta$ (Wrist +Pitch)
+- `5`: $\theta_3 \leftarrow \theta_3 - \Delta\theta$ (Wrist -Pitch)
+- `6`: Toggle Gripper (Parallel Clamping Jaws)
+- `7`: Micro-Align ($\theta_1 + 0.4\Delta\theta, \theta_2 - 0.4\Delta\theta, \theta_3 - 0.2\Delta\theta$)
+- `8`: Hold / Idle
 
-Step magnitude: $\Delta\theta = 5.0^\circ \approx 0.0873\text{ rad}$.
+Step magnitude: $\Delta\theta = 4.0^\circ \approx 0.070\text{ rad}$.
 
 ---
 
@@ -47,10 +52,10 @@ Step magnitude: $\Delta\theta = 5.0^\circ \approx 0.0873\text{ rad}$.
 Instead of directly outputting Q-values $Q(s, a)$, the network decouples state value representation $V(s)$ from the action advantage stream $A(s, a)$:
 
 ```
-State Vector s_t [15]
+State Vector s_t [18]
          │
          ▼
-Linear(15 → 256) + LayerNorm + ReLU
+Linear(18 → 256) + LayerNorm + ReLU
          │
          ▼
 Linear(256 → 256) + ReLU
@@ -58,6 +63,8 @@ Linear(256 → 256) + ReLU
     ▼         ▼
 [Value Stream V(s)]     [Advantage Stream A(s, a)]
 Linear(256 → 128)       Linear(256 → 128)
+Linear(128 → 1)         Linear(128 → 9)
+```
 Linear(128 → 1)         Linear(128 → 7)
     └────┬────┘
          ▼

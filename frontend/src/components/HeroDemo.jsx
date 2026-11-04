@@ -3,9 +3,10 @@ import Stage from './Stage';
 import { createMockBackend } from '../api/mock';
 
 const SCRIPT = [
-  'Pick the red cube and put it in the green bin',
-  'Carefully move the blue sphere to the red bin',
-  'Quickly place the yellow star in the blue bin',
+  'Sort the red micro-module into Bay A (SMT Staging)',
+  'Route the blue quartz lens to Bay B (AOI Inspection)',
+  'Transfer the green optical prism into Bay C (Cleanroom QA)',
+  'Safely route the amber sensor hub into Bay B avoiding the laser spindle',
 ];
 
 // Self-contained looping demo: always runs on the in-browser sample backend.

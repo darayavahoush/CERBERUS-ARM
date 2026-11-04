@@ -89,7 +89,7 @@ export default function AIBrainPipeline({
       head: 'HEAD 2: MUSCLE',
       category: 'Actuation',
       latency: '0.8 ms',
-      shape: '[15] → [7 Q-vals]',
+      shape: '[18] → [9 Q-vals]',
       metric: `ε = ${epsilon.toFixed(3)}`,
       icon: Zap,
       color: '#10b981',
@@ -100,7 +100,7 @@ export default function AIBrainPipeline({
         paper: 'Andrychowicz et al., NeurIPS 2017 & Wang et al., ICML 2016',
         architecture: 'Dueling Value-Advantage Stream: Q(s, a) = V(s) + A(s, a)',
         herStrategy: 'Future Hindsight Relabeling (k=4) converting misses to hits',
-        actionSpace: '7 Primitives: [J1 ±Δθ, J2 ±Δθ, Toggle Gripper, Micro-Align, Hold]',
+        actionSpace: '9 Primitives: [J1 ±Δθ, J2 ±Δθ, J3 ±Δθ, Toggle Gripper, Micro-Align, Hold]',
       },
     },
     {

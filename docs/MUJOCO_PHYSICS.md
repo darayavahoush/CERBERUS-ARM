@@ -8,14 +8,16 @@ This document details the multi-body dynamics, contact mechanics, and interactiv
 
 The articulated physical model is defined in `backend/env/cerberus_arm.xml` compliant with **MuJoCo 3.17**:
 
-### Kinematic Tree
-- **Worldbody**: Global ground plane with high-contrast laboratory grid textures, overhead spotlights, and three circular sorting bays.
-- **Base Pedestal**: Fixed heavy cylindrical mounting pedestal anchored at $(0, 0, 0)$.
-- **Shoulder Joint (`shoulder_joint`)**: Revolute hinge with rotation along local Z-axis ($\text{axis} = [0, 0, 1]$), limited to $\theta_1 \in [-0.785, 3.665]\text{ rad}$.
-- **Upper Arm Link (`upper_arm`)**: Length $L_1 = 1.0\text{ m}$, mass $2.4\text{ kg}$, with anisotropic damping $b = 0.8\text{ N}\cdot\text{s/m}$.
-- **Elbow Joint (`elbow_joint`)**: Revolute hinge along local Z-axis, limited to $\theta_2 \in [0.087, 2.880]\text{ rad}$.
-- **Forearm Link (`forearm`)**: Length $L_2 = 0.8\text{ m}$, mass $1.6\text{ kg}$, damping $b = 0.5\text{ N}\cdot\text{s/m}$.
-- **End-Effector & Parallel Gripper (`left_finger`, `right_finger`)**: Sliding prismatic joints driven by position actuators with tactile friction pads.
+### Kinematic Tree (3-DOF Planar Articulation)
+- **Worldbody**: Global ground plane with high-contrast laboratory grid textures, optical breadboard mounting holes, overhead spotlights, and three circular cleanroom sorting bays.
+- **Base Pedestal**: Fixed heavy cylindrical mounting pedestal anchored at $(0, 0, 0)$ with perimeter hex bolt flange.
+- **Shoulder Joint (`joint1`)**: Revolute hinge with rotation along local Z-axis ($\text{axis} = [0, 0, 1]$), limited to $\theta_1 \in [-0.785, 3.665]\text{ rad}$.
+- **Upper Arm Link (`link1`)**: Length $L_1 = 0.90\text{ m}$, mass $2.4\text{ kg}$, with anisotropic damping $b = 0.8\text{ N}\cdot\text{s/m}$ and dual hydraulic actuators.
+- **Elbow Joint (`joint2`)**: Revolute hinge along local Z-axis, limited to $\theta_2 \in [0.087, 2.880]\text{ rad}$.
+- **Forearm Link (`link2`)**: Length $L_2 = 0.70\text{ m}$, mass $1.6\text{ kg}$, damping $b = 0.5\text{ N}\cdot\text{s/m}$.
+- **Wrist Joint (`joint3`)**: Revolute hinge along local Z-axis, limited to $\theta_3 \in [-2.094, 2.094]\text{ rad}$ for active gripper pitch orientation control $\phi = \theta_1 + \theta_2 + \theta_3$.
+- **Wrist Link (`link3`)**: Length $L_3 = 0.35\text{ m}$, mass $0.8\text{ kg}$.
+- **End-Effector & Parallel Gripper (`finger_left`, `finger_right`)**: Sliding prismatic joints driven by position actuators with high-friction silicone pads.
 
 ---
 
@@ -41,16 +43,16 @@ The backend Python wrapper `backend/env/mujoco_env.py` manages bidirectional syn
 
 ```python
 # Synchronize joint state from high-level RL policy
-mujoco_env.set_joints(theta1, theta2, gripper_closed)
+mujoco_env.set_joints(theta1, theta2, theta3, gripper_closed)
 
 # Extract forward dynamics and multi-body contact telemetry
 state_3d = mujoco_env.get_3d_state()
 # Returns:
-# - qpos: [theta1, theta2] (generalized positions)
-# - qvel: [dtheta1, dtheta2] (generalized velocities)
+# - qpos: [theta1, theta2, theta3] (generalized positions)
+# - qvel: [dtheta1, dtheta2, dtheta3] (generalized velocities)
 # - ee_3d: [x, y, z] (Cartesian end-effector coordinate in 3D world space)
 # - n_contacts: int (active contact manifolds)
-# - actuator_forces: [f_shoulder, f_elbow]
+# - actuator_forces: [f_shoulder, f_elbow, f_wrist]
 # - kinetic_energy: 0.5 * qvel^T * M(qpos) * qvel
 ```
 

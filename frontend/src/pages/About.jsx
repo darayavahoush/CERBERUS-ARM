@@ -2,7 +2,15 @@ import React from 'react';
 import { MarketingShell } from '../components/Shell';
 import { Img } from '../components/ui';
 
-const STACK = [['Vision', 'PyTorch CoordConv CNN with Grad-CAM'], ['Control', 'Dueling Double DQN with hindsight experience replay'], ['Language', 'Local Ollama model, with a built-in rule-based fallback'], ['Backend', 'FastAPI, REST and WebSocket'], ['Frontend', 'React 19, Vite, Recharts']];
+const STACK = [
+  ['Vision (Head 1)', 'PyTorch CoordConv CNN with Grad-CAM & sub-pixel centroid regression'],
+  ['Muscle (Head 2)', '3-DOF Dueling Double-DQN + Hindsight Experience Replay (HER, k=4)'],
+  ['Brain (Head 3)', 'Local Ollama LangGraph State Machine (Qwen2.5 / Llama3.2) with XAI forensics'],
+  ['Physics Engine', 'MuJoCo 3.17 + Runge-Kutta 4th Order (RK4) multi-body dynamics at 500Hz'],
+  ['3D Digital Twin', 'Three.js WebGL PBR renderer with OrbitControls & dynamic shadows'],
+  ['Backend Stack', 'FastAPI, Uvicorn, LangGraph, PyTorch, NumPy, SciPy'],
+  ['Frontend Stack', 'React 19, Vite, Tailwind CSS, Recharts, Lucide'],
+];
 
 export default function About() {
   return (

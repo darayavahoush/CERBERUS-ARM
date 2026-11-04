@@ -36,12 +36,12 @@ flowchart TD
 
     subgraph Manipulation ["HEAD 2: THE MUSCLE"]
         Head2["Goal-Conditioned Dueling Double-DQN + HER\nValue Network V(s) & Advantage Stream A(s, a)"]
-        Policy["Selected Discrete Action Primitive a_t in [0..6]"]
+        Policy["Selected Discrete Action Primitive a_t in [0..8]"]
         Head2 --> Policy
     end
 
-    Policy --> MuJoCo["PHYSICS & ACTUATION\nMuJoCo 3.17 + RK4 Integrator\nPlanar RR Articulated Arm"]
-    MuJoCo --> State["State Vector s_{t+1}\nJoints (theta1, theta2), End-Effector, Torques"]
+    Policy --> MuJoCo["PHYSICS & ACTUATION\nMuJoCo 3.17 + RK4 Integrator\nPlanar 3-DOF RRR Articulated Arm"]
+    MuJoCo --> State["State Vector s_{t+1} in R^18\nJoints (theta1, theta2, theta3), Tool, Torques"]
     State --> Sensors
 
     State --> Dashboard["HIGH-DPI COCKPIT\nThree.js 3D PBR Digital Twin\nNASA Telemetry & Q-Bars\nWeb Audio Sound Synthesizer"]
@@ -60,9 +60,9 @@ flowchart TD
 - **Detailed Reference**: See [docs/PERCEPTION.md](file:///Users/ananyasridhar/Desktop/projects/avi-ana/docs/PERCEPTION.md).
 
 ### Head 2: The Muscle (Closed-Loop Manipulation)
-- **Role**: Maps continuous state vectors $s_t \in \mathbb{R}^{15}$ to optimal discrete joint actuation primitives $a_t \in \mathcal{A}$.
+- **Role**: Maps continuous state vectors $s_t \in \mathbb{R}^{18}$ to optimal discrete joint actuation primitives $a_t \in \mathcal{A}$ (9 primitives).
 - **Algorithm**: Dueling Double-DQN (D3QN) with Hindsight Experience Replay (HER).
-- **Kinematic Constraints**: Yoshikawa manipulability $w(q) = |L_1 L_2 \sin(\theta_2)|$ singularity avoidance and angular jerk regularization.
+- **Kinematic Constraints**: 3-DOF articulated kinematics ($L_1 = 0.90\text{ m}, L_2 = 0.70\text{ m}, L_3 = 0.35\text{ m}$), Yoshikawa manipulability $w(q) = \sqrt{\det(J(q) J(q)^T)}$ singularity avoidance, and angular jerk regularization.
 - **Detailed Reference**: See [docs/REINFORCEMENT_LEARNING.md](file:///Users/ananyasridhar/Desktop/projects/avi-ana/docs/REINFORCEMENT_LEARNING.md) and [docs/KINEMATICS.md](file:///Users/ananyasridhar/Desktop/projects/avi-ana/docs/KINEMATICS.md).
 
 ### Head 3: The Brain (Symbolic Reasoning & Forensic XAI)

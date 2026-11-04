@@ -1,6 +1,6 @@
 // In-browser stand-in for the FastAPI backend. Same response shapes as backend/app.py,
 // so pages never know which one they are talking to.
-import { RECEPTACLES, DEFAULT_PILLAR, SHAPES, COLOR_NAMES, fk, ik, dist, L1, L2 } from '../utils/kinematics';
+import { RECEPTACLES, DEFAULT_PILLAR, SHAPES, COLOR_NAMES, fk, ik, dist, L1, L2, L3 } from '../utils/kinematics';
 
 const DELTA = 0.07;
 const MAX_STEPS = 140;
