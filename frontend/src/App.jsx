@@ -2,14 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 
 import Navbar from './components/Navbar';
+import HomePage from './components/HomePage';
+import Arm3DView from './components/Arm3DView';
 import ArmCanvas from './components/ArmCanvas';
 import VisionHUD from './components/VisionHUD';
 import TelemetryPanel from './components/TelemetryPanel';
 import OllamaConsole from './components/OllamaConsole';
 import BenchmarkModal from './components/BenchmarkModal';
+import { Box, LayoutDashboard, Compass } from 'lucide-react';
 
 export default function App() {
-  // Global Simulation State
+  // Navigation Tab ('home' | '3d_cockpit' | '2d_cockpit')
+  const [activeTab, setActiveTab] = useState('home');
+
+  // Simulation State
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [systemStatus, setSystemStatus] = useState(null);
@@ -43,10 +49,13 @@ export default function App() {
   const [benchmarkData, setBenchmarkData] = useState(null);
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
 
+  // View mode inside cockpit ('3d' | '2d')
+  const [viewportMode, setViewportMode] = useState('3d');
+
   // Simulation timer ref
   const playIntervalRef = useRef(null);
 
-  // Fetch status and initial environment
+  // Initial load
   useEffect(() => {
     fetchStatus();
     handleReset();
@@ -115,12 +124,11 @@ export default function App() {
         setIsSuccess(succ);
         setIsCollision(coll);
 
-        // Update active subgoal progress heuristically
         if (data.observation?.grasped_idx !== null && data.observation?.grasped_idx !== undefined) {
-          setActiveSubgoalIdx((idx) => Math.max(idx, 3)); // In transit
+          setActiveSubgoalIdx((idx) => Math.max(idx, 3));
         } else if (succ) {
-          setActiveSubgoalIdx(4); // Released in receptacle
-          confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+          setActiveSubgoalIdx(4);
+          confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } });
         }
 
         if (data.terminated || data.truncated) {
@@ -151,7 +159,7 @@ export default function App() {
     setIsPlaying(!isPlaying);
   };
 
-  // Compile task via Ollama
+  // Task Planner
   const handlePlanTask = async (instruction) => {
     setPlanLoading(true);
     try {
@@ -178,7 +186,7 @@ export default function App() {
     }
   };
 
-  // Run Perception Inspection
+  // Perception Inspection
   const handleInspectPerception = async () => {
     setInspectLoading(true);
     try {
@@ -222,7 +230,7 @@ export default function App() {
     }
   };
 
-  // Run Training Batch
+  // Training step
   const handleTrain = async () => {
     setLoading(true);
     try {
@@ -232,9 +240,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         fetchStatus();
-        confetti({ particleCount: 40, spread: 45, origin: { y: 0.2 } });
+        confetti({ particleCount: 50, spread: 50, origin: { y: 0.2 } });
         alert(
-          `Trained 5 Episodes!\nSuccess Rate: ${data.success_rate}%\nMean Return: ${data.mean_reward}\nEpsilon: ${data.current_epsilon}`
+          `Trained 5 Episodes with Hindsight Relabeling!\nSuccess Rate: ${data.success_rate}%\nMean Return: ${data.mean_reward}\nEpsilon: ${data.current_epsilon}`
         );
       }
     } catch (err) {
@@ -261,9 +269,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col bg-grid-cyber">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col bg-grid-cyber selection:bg-cyan-500/20">
       {/* Top Navigation */}
       <Navbar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
         isPlaying={isPlaying}
         onTogglePlay={handleTogglePlay}
         onStep={() => handleStep()}
@@ -277,53 +287,113 @@ export default function App() {
         loading={loading}
       />
 
-      {/* Main Grid Content */}
-      <main className="flex-1 p-5 grid grid-cols-12 gap-5 max-w-[1720px] mx-auto w-full">
-        {/* Left Column: Perception HUD & Ollama Console (4 cols) */}
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-5">
-          <OllamaConsole
-            onPlanTask={handlePlanTask}
-            activePlan={activePlan}
-            activeSubgoalIdx={activeSubgoalIdx}
-            xaiExplanation={xaiExplanation}
-            onRequestXAI={handleRequestXAI}
-            ollamaStatus={systemStatus?.ollama}
-            loading={planLoading}
-          />
-          <VisionHUD
-            renderedImage={renderedImage}
-            perceptionData={perceptionData}
-            onInspect={handleInspectPerception}
-            loading={inspectLoading}
-          />
-        </div>
+      {/* Render Active View */}
+      {activeTab === 'home' ? (
+        <HomePage
+          onLaunchCockpit={() => setActiveTab('3d_cockpit')}
+          onOpenBenchmark={() => {
+            setIsBenchmarkOpen(true);
+            if (!benchmarkData) handleRunBenchmark();
+          }}
+          systemStatus={systemStatus}
+        />
+      ) : (
+        /* Cockpit Views ('3d_cockpit' or '2d_cockpit') */
+        <main className="flex-1 p-4 sm:p-6 grid grid-cols-12 gap-5 max-w-[1760px] mx-auto w-full">
+          {/* Left Column: Perception HUD & Ollama Console (4 cols) */}
+          <div className="col-span-12 lg:col-span-4 flex flex-col gap-5">
+            <OllamaConsole
+              onPlanTask={handlePlanTask}
+              activePlan={activePlan}
+              activeSubgoalIdx={activeSubgoalIdx}
+              xaiExplanation={xaiExplanation}
+              onRequestXAI={handleRequestXAI}
+              ollamaStatus={systemStatus?.ollama}
+              loading={planLoading}
+            />
+            <VisionHUD
+              renderedImage={renderedImage}
+              perceptionData={perceptionData}
+              onInspect={handleInspectPerception}
+              loading={inspectLoading}
+            />
+          </div>
 
-        {/* Center Column: Kinematics Visualizer (5 cols) */}
-        <div className="col-span-12 lg:col-span-5 flex flex-col">
-          <ArmCanvas
-            observation={observation}
-            obstacles={obstacles}
-            onObjectClick={(idx, obj) => {
-              handlePlanTask(`Pick the ${obj.color} ${obj.shape} and move it to the blue bin.`);
-            }}
-          />
-        </div>
+          {/* Center Column: Manipulator Visualizer (3D or 2D Toggle) (5 cols) */}
+          <div className="col-span-12 lg:col-span-5 flex flex-col gap-2">
+            {/* Viewport Mode Switcher Header */}
+            <div className="flex items-center justify-between px-2">
+              <span className="text-xs font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Box className="w-3.5 h-3.5 text-cyan-400" />
+                Active Manipulator Display:
+              </span>
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono">
+                <button
+                  onClick={() => setViewportMode('3d')}
+                  className={`px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all ${
+                    viewportMode === '3d'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Box className="w-3 h-3" />
+                  3D MuJoCo PBR
+                </button>
+                <button
+                  onClick={() => setViewportMode('2d')}
+                  className={`px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all ${
+                    viewportMode === '2d'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <LayoutDashboard className="w-3 h-3" />
+                  2D Kinematics
+                </button>
+              </div>
+            </div>
 
-        {/* Right Column: DRL Telemetry & Q-Values (3 cols) */}
-        <div className="col-span-12 lg:col-span-3 flex flex-col gap-5">
-          <TelemetryPanel
-            qValues={qValues}
-            currentAction={currentAction}
-            reward={reward}
-            cumulativeReward={cumulativeReward}
-            step={observation?.step || 0}
-            epsilon={systemStatus?.drl?.epsilon || 0.05}
-            isCollision={isCollision}
-            isSuccess={isSuccess}
-            rewardHistory={rewardHistory}
-          />
-        </div>
-      </main>
+            {/* Viewport Component */}
+            <div className="flex-1 min-h-[500px]">
+              {viewportMode === '3d' ? (
+                <Arm3DView
+                  theta1={observation?.theta1 ?? Math.PI / 3}
+                  theta2={observation?.theta2 ?? Math.PI / 4}
+                  gripperClosed={observation?.gripper_closed ?? false}
+                  isGrasped={observation?.grasped_idx !== null && observation?.grasped_idx !== undefined}
+                  objects={observation?.objects || []}
+                  targetIdx={observation?.target_idx ?? 0}
+                  obstacles={obstacles}
+                  receptacles={systemStatus?.receptacles}
+                />
+              ) : (
+                <ArmCanvas
+                  observation={observation}
+                  obstacles={obstacles}
+                  onObjectClick={(idx, obj) => {
+                    handlePlanTask(`Pick the ${obj.color} ${obj.shape} and deposit it into the blue bin.`);
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: DRL Telemetry & Q-Values (3 cols) */}
+          <div className="col-span-12 lg:col-span-3 flex flex-col gap-5">
+            <TelemetryPanel
+              qValues={qValues}
+              currentAction={currentAction}
+              reward={reward}
+              cumulativeReward={cumulativeReward}
+              step={observation?.step || 0}
+              epsilon={systemStatus?.drl?.epsilon || 0.05}
+              isCollision={isCollision}
+              isSuccess={isSuccess}
+              rewardHistory={rewardHistory}
+            />
+          </div>
+        </main>
+      )}
 
       {/* Benchmark Evaluation Modal */}
       <BenchmarkModal

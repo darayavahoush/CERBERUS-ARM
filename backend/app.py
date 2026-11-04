@@ -20,13 +20,14 @@ import os
 
 from backend.env.robotic_arm_env import RoboticArmEnv, SHAPES, COLORS, RECEPTACLES
 from backend.env.generator import WorkspaceRenderer
+from backend.env.mujoco_env import CerberusMuJoCoEnv
 from backend.models.perception_cnn import MultiTaskPerceptionCNN
 from backend.agent.d3qn_agent import D3QNAgent
 from backend.agent.policy_comparator import PolicyComparator
 from backend.llm.ollama_client import OllamaRoboticClient
 
 
-app = FastAPI(title="NEURO-ARM Manipulation Cockpit", version="1.0.0")
+app = FastAPI(title="CERBERUS-ARM Manipulation Cockpit", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +40,7 @@ app.add_middleware(
 # Global Component Instantiations
 env = RoboticArmEnv()
 renderer = WorkspaceRenderer(width=256, height=256)
+mujoco_env = CerberusMuJoCoEnv()
 
 # Hardware device
 device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
@@ -110,13 +112,23 @@ def image_to_base64(img) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+@app.get("/api/mujoco/state")
+async def get_mujoco_state():
+    """Retrieve real-time MuJoCo 3D physics state."""
+    mujoco_env.set_joints(env.theta1, env.theta2, env.gripper_closed)
+    return mujoco_env.get_3d_state()
+
+
 @app.get("/api/status")
 async def get_system_status():
     """Return health and readiness metrics for all system tiers."""
     ollama_info = await ollama.check_status()
+    mujoco_info = mujoco_env.get_3d_state()
     return {
         "status": "online",
         "device": device,
+        "physics_engine": "MuJoCo 3.17 + RK4 Integrator" if mujoco_info.get("available") else "Analytical",
+        "mujoco": mujoco_info,
         "cnn": {
             "architecture": "CoordConv + Multi-Task Backbone",
             "gradcam_enabled": True,
@@ -214,6 +226,10 @@ async def step_environment(req: StepRequest):
         obs_after["fk"], obs_after["objects"], env.obstacles, RECEPTACLES, obs_after["gripper_closed"]
     )
 
+    # Sync MuJoCo physics state
+    mujoco_env.set_joints(obs_after["theta1"], obs_after["theta2"], obs_after["gripper_closed"])
+    mujoco_state = mujoco_env.get_3d_state()
+
     return {
         "observation": obs_after,
         "reward": round(reward, 3),
@@ -223,6 +239,7 @@ async def step_environment(req: StepRequest):
         "action": action,
         "q_values": [round(q, 4) for q in q_values],
         "rendered_image": image_to_base64(img),
+        "mujoco": mujoco_state,
     }
 
 

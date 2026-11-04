@@ -1,0 +1,122 @@
+<mujoco model="cerberus_arm_manipulator">
+  <compiler angle="radian" coordinate="local" meshdir="meshes" autolimits="true"/>
+  
+  <option timestep="0.005" integrator="RK4" gravity="0 0 -9.81">
+    <flag contact="enable"/>
+  </option>
+
+  <default>
+    <joint damping="0.5" armature="0.02"/>
+    <geom friction="1.0 0.005 0.0001" density="1000"/>
+  </default>
+
+  <visual>
+    <headlight ambient="0.3 0.3 0.35" diffuse="0.7 0.7 0.75" specular="0.3 0.3 0.3"/>
+    <rgba haze="0.1 0.12 0.15 1"/>
+  </visual>
+
+  <asset>
+    <!-- Textures and Materials -->
+    <texture name="grid_floor" type="2d" builtin="checker" width="512" height="512" rgb1="0.08 0.10 0.14" rgb2="0.05 0.07 0.10"/>
+    <material name="mat_floor" texture="grid_floor" texrepeat="6 6" reflectance="0.15" roughness="0.6"/>
+    
+    <material name="mat_carbon" rgba="0.12 0.14 0.18 1" metallic="0.8" roughness="0.3"/>
+    <material name="mat_titanium" rgba="0.65 0.70 0.75 1" metallic="0.9" roughness="0.2"/>
+    <material name="mat_joint_cyan" rgba="0.02 0.71 0.83 1" emission="0.3"/>
+    <material name="mat_hazard" rgba="0.94 0.27 0.27 0.6" emission="0.4"/>
+    <material name="mat_blue_bay" rgba="0.23 0.51 0.96 0.5" emission="0.3"/>
+    <material name="mat_red_bay" rgba="0.94 0.27 0.27 0.5" emission="0.3"/>
+    <material name="mat_green_bay" rgba="0.06 0.72 0.51 0.5" emission="0.3"/>
+    
+    <!-- Object Materials -->
+    <material name="mat_obj_crimson" rgba="0.94 0.27 0.27 1" specular="0.8" roughness="0.2"/>
+    <material name="mat_obj_cobalt" rgba="0.23 0.51 0.96 1" specular="0.8" roughness="0.2"/>
+    <material name="mat_obj_emerald" rgba="0.06 0.72 0.51 1" specular="0.8" roughness="0.2"/>
+    <material name="mat_obj_amber" rgba="0.96 0.62 0.04 1" specular="0.8" roughness="0.2"/>
+  </asset>
+
+  <worldbody>
+    <!-- Laboratory Floor -->
+    <geom name="floor" type="plane" size="3 3 0.1" material="mat_floor"/>
+    
+    <!-- Studio Key and Fill Lights -->
+    <light directional="true" pos="1.5 1.5 3.5" dir="-0.5 -0.5 -1" diffuse="0.8 0.85 0.9" specular="0.4 0.4 0.4"/>
+    <light directional="true" pos="-2 -1 2.5" dir="0.8 0.4 -0.8" diffuse="0.3 0.35 0.4"/>
+
+    <!-- Receptacle Storage Bins -->
+    <body name="red_bay" pos="-1.2 0.45 0.02">
+      <geom type="cylinder" size="0.22 0.02" material="mat_red_bay" contype="0" conaffinity="0"/>
+    </body>
+    <body name="blue_bay" pos="1.2 0.45 0.02">
+      <geom type="cylinder" size="0.22 0.02" material="mat_blue_bay" contype="0" conaffinity="0"/>
+    </body>
+    <body name="green_bay" pos="0.0 1.55 0.02">
+      <geom type="cylinder" size="0.22 0.02" material="mat_green_bay" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- Central Hazard Exclusion Zone -->
+    <body name="hazard_pillar" pos="0.0 0.85 0.25">
+      <geom type="cylinder" size="0.22 0.25" material="mat_hazard"/>
+    </body>
+
+    <!-- 2-DOF Planar Robotic Manipulator (RR) -->
+    <body name="base_pedestal" pos="0 0 0.05">
+      <geom type="cylinder" size="0.18 0.05" material="mat_carbon"/>
+      <geom type="cylinder" size="0.12 0.08" pos="0 0 0.05" material="mat_titanium"/>
+
+      <!-- Link 1 (Shoulder to Elbow) -->
+      <body name="link1" pos="0 0 0.1">
+        <joint name="joint1" type="hinge" axis="0 0 1" range="-2.618 2.618"/>
+        <geom type="cylinder" size="0.08 0.06" material="mat_joint_cyan"/>
+        <geom type="capsule" fromto="0 0 0 1.0 0 0" size="0.045" material="mat_carbon"/>
+        
+        <!-- Link 2 (Elbow to Wrist) -->
+        <body name="link2" pos="1.0 0 0">
+          <joint name="joint2" type="hinge" axis="0 0 1" range="-2.356 2.356"/>
+          <geom type="cylinder" size="0.06 0.05" material="mat_joint_cyan"/>
+          <geom type="capsule" fromto="0 0 0 0.8 0 0" size="0.035" material="mat_carbon"/>
+
+          <!-- End-Effector / Magnetic Gripper -->
+          <body name="end_effector" pos="0.8 0 0">
+            <geom name="gripper_base" type="box" size="0.04 0.05 0.03" material="mat_titanium"/>
+            <site name="ee_site" pos="0.05 0 0" size="0.015" rgba="0.02 0.71 0.83 1"/>
+            
+            <!-- Gripper Finger Left -->
+            <body name="finger_left" pos="0.04 0.035 0">
+              <joint name="joint_finger_left" type="slide" axis="0 1 0" range="0 0.03"/>
+              <geom type="box" size="0.03 0.008 0.025" material="mat_titanium"/>
+            </body>
+            
+            <!-- Gripper Finger Right -->
+            <body name="finger_right" pos="0.04 -0.035 0">
+              <joint name="joint_finger_right" type="slide" axis="0 1 0" range="-0.03 0"/>
+              <geom type="box" size="0.03 0.008 0.025" material="mat_titanium"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- Manipulable Workspace Objects -->
+    <body name="obj_cube" pos="-0.7 0.9 0.05">
+      <joint type="free"/>
+      <geom type="box" size="0.045 0.045 0.045" material="mat_obj_crimson" mass="0.15"/>
+    </body>
+
+    <body name="obj_sphere" pos="0.6 1.1 0.05">
+      <joint type="free"/>
+      <geom type="sphere" size="0.05" material="mat_obj_emerald" mass="0.15"/>
+    </body>
+
+    <body name="obj_triangle" pos="-0.2 1.3 0.05">
+      <joint type="free"/>
+      <geom type="cylinder" size="0.045 0.045" material="mat_obj_amber" mass="0.15"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="motor_joint1" joint="joint1" gear="1" ctrllimited="true" ctrlrange="-50 50"/>
+    <motor name="motor_joint2" joint="joint2" gear="1" ctrllimited="true" ctrlrange="-40 40"/>
+    <position name="act_gripper" joint="joint_finger_left" kp="300" ctrlrange="0 0.03"/>
+  </actuator>
+</mujoco>
